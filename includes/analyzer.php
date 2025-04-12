@@ -306,7 +306,7 @@ function airbnb_analyzer_analyze_listing($listing_data) {
         'score' => 0,
         'max_score' => 100,
         'summary' => '',
-        'first_photo' => !empty($listing_data['photos']) ? $listing_data['photos'][0] : '',
+        'first_photo' => !empty($listing_data['photos'][0]) ? $listing_data['photos'][0] : '',
         'recommendations' => array(),
         'listing_data' => $listing_data,
     );

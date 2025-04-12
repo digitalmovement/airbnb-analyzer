@@ -58,6 +58,13 @@ jQuery(document).ready(function($) {
     function displayResults(data) {
         var html = '';
         
+        // Add listing title if available
+        if (data.listing_data && data.listing_data.title) {
+            html += '<div class="airbnb-analyzer-listing-title">';
+            html += '<h2>' + data.listing_data.title + '</h2>';
+            html += '</div>';
+        }
+        
         // Add header with score
         html += '<div class="airbnb-analyzer-header">';
         html += '<h3>Analysis Results</h3>';
@@ -68,7 +75,11 @@ jQuery(document).ready(function($) {
         html += '</div>';
         
         // Add listing photo if available
-        if (data.first_photo) {
+        if (data.listing_data && data.listing_data.photos && data.listing_data.photos.length > 0) {
+            html += '<div class="airbnb-analyzer-photo">';
+            html += '<img src="' + data.listing_data.photos[0] + '" alt="Listing Photo">';
+            html += '</div>';
+        } else if (data.first_photo) {
             html += '<div class="airbnb-analyzer-photo">';
             html += '<img src="' + data.first_photo + '" alt="Listing Photo">';
             html += '</div>';
