@@ -36,14 +36,18 @@ function airbnb_analyzer_deactivate() {
 
 // Enqueue scripts and styles
 function airbnb_analyzer_enqueue_scripts() {
-    wp_enqueue_style('airbnb-analyzer-css', AIRBNB_ANALYZER_URL . 'css/style.css', array(), '1.0.0');
-    wp_enqueue_script('airbnb-analyzer-js', AIRBNB_ANALYZER_URL . 'js/script.js', array('jquery'), '1.0.0', true);
-    
-    // Add ajax url for JavaScript
-    wp_localize_script('airbnb-analyzer-js', 'airbnb_analyzer_ajax', array(
-        'ajax_url' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('airbnb_analyzer_nonce')
-    ));
+    // Only load scripts and styles when the shortcode is present on the page
+    global $post;
+    if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'airbnb_analyzer')) {
+        wp_enqueue_style('airbnb-analyzer-css', AIRBNB_ANALYZER_URL . 'css/style.css', array(), '1.0.0');
+        wp_enqueue_script('airbnb-analyzer-js', AIRBNB_ANALYZER_URL . 'js/script.js', array('jquery'), '1.0.0', true);
+        
+        // Add ajax url for JavaScript
+        wp_localize_script('airbnb-analyzer-js', 'airbnb_analyzer_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('airbnb_analyzer_nonce')
+        ));
+    }
 }
 add_action('wp_enqueue_scripts', 'airbnb_analyzer_enqueue_scripts');
 
@@ -67,6 +71,11 @@ function airbnb_analyzer_process_request() {
     
     if (is_wp_error($listing_data)) {
         wp_send_json_error(array('message' => $listing_data->get_error_message()));
+    }
+    
+    // Check if listing data is empty
+    if (empty($listing_data) || !is_array($listing_data)) {
+        wp_send_json_error(array('message' => 'Unable to retrieve listing data. Please check the URL and try again.'));
     }
     
     // Analyze listing

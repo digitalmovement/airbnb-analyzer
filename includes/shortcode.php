@@ -42,6 +42,7 @@ function airbnb_analyzer_shortcode($atts) {
         
         <div id="airbnb-analyzer-results" class="airbnb-analyzer-results" style="display: none;">
             <div class="airbnb-analyzer-loading" style="display: none;">
+                <div class="loading-spinner"></div>
                 <p>Analyzing your listing... Please wait.</p>
             </div>
             <div class="airbnb-analyzer-content"></div>
