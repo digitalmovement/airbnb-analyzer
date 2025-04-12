@@ -24,7 +24,19 @@ require_once(AIRBNB_ANALYZER_PATH . 'includes/api.php');
 register_activation_hook(__FILE__, 'airbnb_analyzer_activate');
 
 function airbnb_analyzer_activate() {
-    // Activation tasks if needed
+    // Check PHP version
+    if (version_compare(PHP_VERSION, '5.6', '<')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die('This plugin requires PHP 5.6 or higher.');
+    }
+    
+    // Check WordPress version
+    if (version_compare($GLOBALS['wp_version'], '4.7', '<')) {
+        deactivate_plugins(plugin_basename(__FILE__));
+        wp_die('This plugin requires WordPress 4.7 or higher.');
+    }
+    
+    // Other activation tasks if needed
 }
 
 // Register deactivation hook
