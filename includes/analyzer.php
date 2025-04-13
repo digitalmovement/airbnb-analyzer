@@ -592,6 +592,12 @@ function airbnb_analyzer_analyze_listing_with_claude($listing_data) {
             $analysis['claude_analysis']['host'] = $host_analysis['data'];
         }
         
+        // Analyze amenities
+        $amenities_analysis = airbnb_analyzer_claude_analyze_amenities($listing_data);
+        if ($amenities_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['amenities'] = $amenities_analysis['data'];
+        }
+        
         // Add Claude analysis summary
         if (isset($analysis['claude_analysis'])) {
             $analysis['has_claude_analysis'] = true;
@@ -599,5 +605,153 @@ function airbnb_analyzer_analyze_listing_with_claude($listing_data) {
     }
     
     return $analysis;
+}
+
+/**
+ * Analyze amenities
+ * 
+ * @param array $amenities The listing amenities
+ * @return array Analysis results
+ */
+function analyze_amenities($amenities) {
+    $result = array(
+        'category' => 'Amenities',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array()
+    );
+    
+    // Count amenities
+    $amenity_count = count($amenities);
+    
+    // Define essential amenities by category
+    $essential_amenities = array(
+        'Bathroom' => array(
+            'Hair dryer',
+            'Shampoo',
+            'Hot water',
+            'Shower gel',
+            'Toilet paper'
+        ),
+        'Bedroom and Laundry' => array(
+            'Washing machine',
+            'Dryer',
+            'Bed linens',
+            'Extra pillows and blankets',
+            'Hangers',
+            'Iron'
+        ),
+        'Essentials' => array(
+            'Towels',
+            'Bed sheets',
+            'Soap',
+            'Toilet paper',
+            'Hangers'
+        ),
+        'Entertainment' => array(
+            'TV',
+            'Books',
+            'Board games'
+        ),
+        'Heating and Cooling' => array(
+            'Heating',
+            'Air conditioning',
+            'Fans'
+        ),
+        'Home Safety' => array(
+            'Smoke alarm',
+            'Carbon monoxide alarm',
+            'Fire extinguisher',
+            'First aid kit'
+        ),
+        'Internet and Office' => array(
+            'Wifi',
+            'Dedicated workspace',
+            'Laptop-friendly workspace'
+        ),
+        'Kitchen and Dining' => array(
+            'Kitchen',
+            'Refrigerator',
+            'Microwave',
+            'Cooking basics',
+            'Dishes and silverware',
+            'Dishwasher',
+            'Coffee maker'
+        )
+    );
+    
+    // Check for missing essential amenities by category
+    $missing_by_category = array();
+    $present_count = 0;
+    $total_essentials = 0;
+    
+    foreach ($essential_amenities as $category => $essentials) {
+        $missing = array();
+        
+        foreach ($essentials as $essential) {
+            $total_essentials++;
+            $found = false;
+            
+            foreach ($amenities as $amenity) {
+                if (stripos($amenity, $essential) !== false) {
+                    $found = true;
+                    $present_count++;
+                    break;
+                }
+            }
+            
+            if (!$found) {
+                $missing[] = $essential;
+            }
+        }
+        
+        if (!empty($missing)) {
+            $missing_by_category[$category] = $missing;
+        }
+    }
+    
+    // Calculate score based on essential amenities coverage and total count
+    $essentials_score = ($total_essentials > 0) ? ($present_count / $total_essentials) * 7 : 0;
+    $count_score = min(3, ($amenity_count / 20) * 3); // Max 3 points for quantity
+    
+    $result['score'] = round($essentials_score + $count_score);
+    
+    // Set status based on score
+    if ($result['score'] >= 8) {
+        $result['status'] = 'excellent';
+    } elseif ($result['score'] >= 6) {
+        $result['status'] = 'good';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'average';
+    } else {
+        $result['status'] = 'poor';
+    }
+    
+    // Set message based on score
+    if ($result['score'] >= 8) {
+        $result['message'] = 'Excellent amenities! Your listing offers most of the essential amenities guests look for.';
+    } elseif ($result['score'] >= 6) {
+        $result['message'] = 'Good amenities coverage, but there\'s room for improvement in some categories.';
+    } elseif ($result['score'] >= 4) {
+        $result['message'] = 'Your listing is missing several important amenities that guests typically expect.';
+    } else {
+        $result['message'] = 'Your listing lacks many essential amenities. Adding these could significantly improve your bookings.';
+    }
+    
+    // Add recommendations for missing essentials by category
+    foreach ($missing_by_category as $category => $missing) {
+        if (count($missing) > 0) {
+            $result['recommendations'][] = $category . ': Consider adding ' . implode(', ', $missing);
+        }
+    }
+    
+    // Add general recommendation for amenity count if needed
+    if ($amenity_count < 15) {
+        $result['recommendations'][] = 'Try to offer at least 15-20 amenities to make your listing more attractive to potential guests.';
+    }
+    
+    return $result;
 }
 ?> 

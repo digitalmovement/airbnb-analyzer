@@ -325,4 +325,39 @@
 /* CAPTCHA container */
 #airbnb-analyzer-captcha {
     margin-bottom: 15px;
+}
+
+/* Amenities analysis styles */
+.amenities-categories {
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+.amenity-category {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.amenity-category h6 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    color: #484848;
+    font-weight: 600;
+}
+
+.amenity-category p {
+    margin: 0;
+}
+
+.standout-amenities {
+    margin-top: 10px;
+    margin-bottom: 15px;
+    padding-left: 20px;
+}
+
+.standout-amenities li {
+    margin-bottom: 5px;
+    color: #008489;
 } 

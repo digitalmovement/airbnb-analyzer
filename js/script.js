@@ -203,6 +203,63 @@ jQuery(document).ready(function($) {
                 html += '</div>';
             }
             
+            // Amenities analysis
+            if (data.claude_analysis.amenities) {
+                html += '<div class="claude-section">';
+                html += '<h4>Amenities Analysis</h4>';
+                html += '<div class="claude-rating">Score: <span class="' + getScoreClass(data.claude_analysis.amenities.score * 10) + '">' + data.claude_analysis.amenities.score + '/10</span></div>';
+                
+                html += '<h5>Overall Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.amenities.overall_feedback + '</p>';
+                
+                if (data.claude_analysis.amenities.category_analysis) {
+                    html += '<h5>Category Analysis:</h5>';
+                    html += '<div class="amenities-categories">';
+                    
+                    for (const [category, feedback] of Object.entries(data.claude_analysis.amenities.category_analysis)) {
+                        html += '<div class="amenity-category">';
+                        html += '<h6>' + category + '</h6>';
+                        html += '<p>' + feedback + '</p>';
+                        html += '</div>';
+                    }
+                    
+                    html += '</div>';
+                }
+                
+                if (data.claude_analysis.amenities.standout_amenities && data.claude_analysis.amenities.standout_amenities.length > 0) {
+                    html += '<h5>Standout Amenities:</h5>';
+                    html += '<ul class="standout-amenities">';
+                    data.claude_analysis.amenities.standout_amenities.forEach(function(amenity) {
+                        html += '<li>' + amenity + '</li>';
+                    });
+                    html += '</ul>';
+                }
+                
+                if (data.claude_analysis.amenities.missing_essentials && data.claude_analysis.amenities.missing_essentials.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Missing Essential Amenities:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.amenities.missing_essentials.forEach(function(amenity) {
+                        html += '<li>' + amenity + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                
+                if (data.claude_analysis.amenities.suggestions && data.claude_analysis.amenities.suggestions.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Improvement Suggestions:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.amenities.suggestions.forEach(function(suggestion) {
+                        html += '<li>' + suggestion + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            }
+            
             html += '</div>';
         }
         

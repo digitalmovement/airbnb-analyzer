@@ -259,4 +259,82 @@ Format your response as JSON with these fields:
         'status' => 'error',
         'message' => 'Could not parse Claude response'
     );
+}
+
+/**
+ * Analyze amenities with Claude
+ * 
+ * @param array $listing_data The listing data
+ * @return array Analysis results
+ */
+function airbnb_analyzer_claude_analyze_amenities($listing_data) {
+    $amenities = isset($listing_data['amenities']) ? $listing_data['amenities'] : array();
+    $amenities_list = implode("\n", $amenities);
+    $property_type = isset($listing_data['property_type']) ? $listing_data['property_type'] : 'Property';
+    
+    // Define essential amenities by category for reference
+    $essential_categories = "
+Bathroom: Hair dryer, Shampoo, Hot water, Shower gel, Toilet paper
+Bedroom and Laundry: Washing machine, Dryer, Bed linens, Extra pillows and blankets, Hangers, Iron
+Essentials: Towels, Bed sheets, Soap, Toilet paper, Hangers
+Entertainment: TV, Books, Board games
+Heating and Cooling: Heating, Air conditioning, Fans
+Home Safety: Smoke alarm, Carbon monoxide alarm, Fire extinguisher, First aid kit
+Internet and Office: Wifi, Dedicated workspace, Laptop-friendly workspace
+Kitchen and Dining: Kitchen, Refrigerator, Microwave, Cooking basics, Dishes and silverware, Dishwasher, Coffee maker";
+    
+    $prompt = "You are an Airbnb optimization expert. Please analyze these amenities for a $property_type listing:
+
+$amenities_list
+
+Here are the essential amenities by category that guests typically look for:
+$essential_categories
+
+Please analyze:
+1. Overall amenities score (1-10)
+2. Coverage of essential amenities by category
+3. Missing important amenities by category
+4. Standout/unique amenities that could be highlighted in the listing
+5. Specific improvement suggestions
+
+Format your response as JSON with these fields:
+- score: (number)
+- overall_feedback: (string)
+- category_analysis: (object with category names as keys and feedback as values)
+- missing_essentials: (array of strings)
+- standout_amenities: (array of strings)
+- suggestions: (array of strings)";
+    
+    $response = airbnb_analyzer_claude_request($prompt);
+    
+    if (is_wp_error($response)) {
+        return array(
+            'status' => 'error',
+            'message' => $response->get_error_message()
+        );
+    }
+    
+    // Extract the content from Claude's response
+    if (isset($response['content'][0]['text'])) {
+        $content = $response['content'][0]['text'];
+        // Try to parse the JSON response
+        $json_start = strpos($content, '{');
+        $json_end = strrpos($content, '}');
+        if ($json_start !== false && $json_end !== false) {
+            $json = substr($content, $json_start, $json_end - $json_start + 1);
+            $data = json_decode($json, true);
+            if ($data) {
+                return array(
+                    'status' => 'success',
+                    'data' => $data
+                );
+            }
+        }
+    }
+    
+    // Fallback if JSON parsing fails
+    return array(
+        'status' => 'error',
+        'message' => 'Could not parse Claude response'
+    );
 } 
