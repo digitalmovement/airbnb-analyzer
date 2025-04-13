@@ -81,7 +81,7 @@ function airbnb_analyzer_process_request() {
     // Get listing data
     $listing_data = airbnb_analyzer_get_listing_data($listing_url);
     
-    print_r($listing_data);
+
     if (is_wp_error($listing_data)) {
         wp_send_json_error(array('message' => $listing_data->get_error_message()));
     }
