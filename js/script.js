@@ -85,6 +85,82 @@ jQuery(document).ready(function($) {
             html += '</div>';
         }
         
+        // Add Claude AI insights if available
+        if (data.has_claude_analysis) {
+            html += '<div class="airbnb-analyzer-claude-insights">';
+            html += '<h3>AI-Powered Insights</h3>';
+            
+            // Title analysis
+            if (data.claude_analysis.title) {
+                html += '<div class="claude-section">';
+                html += '<h4>Title Analysis</h4>';
+                html += '<div class="claude-rating">Rating: <span class="' + getScoreClass(data.claude_analysis.title.rating * 10) + '">' + data.claude_analysis.title.rating + '/10</span></div>';
+                html += '<p>' + data.claude_analysis.title.feedback + '</p>';
+                
+                if (data.claude_analysis.title.alternative_titles && data.claude_analysis.title.alternative_titles.length > 0) {
+                    html += '<div class="claude-alternatives">';
+                    html += '<h5>Suggested Alternatives:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.title.alternative_titles.forEach(function(title) {
+                        html += '<li>' + title + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            
+            // Description analysis
+            if (data.claude_analysis.description) {
+                html += '<div class="claude-section">';
+                html += '<h4>Description Analysis</h4>';
+                html += '<div class="claude-rating">Rating: <span class="' + getScoreClass(data.claude_analysis.description.rating * 10) + '">' + data.claude_analysis.description.rating + '/10</span></div>';
+                html += '<h5>First Impression (First 400 characters):</h5>';
+                html += '<p>' + data.claude_analysis.description.first_impression + '</p>';
+                html += '<h5>Overall Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.description.overall_feedback + '</p>';
+                
+                if (data.claude_analysis.description.suggestions && data.claude_analysis.description.suggestions.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Improvement Suggestions:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.description.suggestions.forEach(function(suggestion) {
+                        html += '<li>' + suggestion + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            
+            // Host analysis
+            if (data.claude_analysis.host) {
+                html += '<div class="claude-section">';
+                html += '<h4>Host Profile Analysis</h4>';
+                html += '<div class="claude-rating">Completeness: <span class="' + getScoreClass(data.claude_analysis.host.completeness_score * 10) + '">' + data.claude_analysis.host.completeness_score + '/10</span></div>';
+                html += '<h5>Bio Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.host.bio_feedback + '</p>';
+                html += '<h5>Response Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.host.response_feedback + '</p>';
+                html += '<h5>Highlights Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.host.highlights_feedback + '</p>';
+                
+                if (data.claude_analysis.host.suggestions && data.claude_analysis.host.suggestions.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Improvement Suggestions:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.host.suggestions.forEach(function(suggestion) {
+                        html += '<li>' + suggestion + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            
+            html += '</div>';
+        }
+        
         // Add recommendations
         html += '<div class="airbnb-analyzer-recommendations">';
         

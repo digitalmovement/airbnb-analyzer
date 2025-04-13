@@ -561,4 +561,43 @@ function airbnb_analyzer_check_amenities($amenities) {
     
     return $result;
 }
+
+/**
+ * Analyze AirBnB listing with Claude AI
+ * 
+ * @param array $listing_data The listing data
+ * @return array Analysis results with AI insights
+ */
+function airbnb_analyzer_analyze_listing_with_claude($listing_data) {
+    // Get regular analysis first
+    $analysis = airbnb_analyzer_analyze_listing($listing_data);
+    
+    // Add Claude AI analysis if API key is configured
+    if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
+        // Analyze title
+        $title_analysis = airbnb_analyzer_claude_analyze_title($listing_data);
+        if ($title_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['title'] = $title_analysis['data'];
+        }
+        
+        // Analyze description
+        $description_analysis = airbnb_analyzer_claude_analyze_description($listing_data);
+        if ($description_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['description'] = $description_analysis['data'];
+        }
+        
+        // Analyze host profile
+        $host_analysis = airbnb_analyzer_claude_analyze_host($listing_data);
+        if ($host_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['host'] = $host_analysis['data'];
+        }
+        
+        // Add Claude analysis summary
+        if (isset($analysis['claude_analysis'])) {
+            $analysis['has_claude_analysis'] = true;
+        }
+    }
+    
+    return $analysis;
+}
 ?> 

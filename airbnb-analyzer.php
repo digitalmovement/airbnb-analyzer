@@ -19,6 +19,8 @@ define('AIRBNB_ANALYZER_URL', plugin_dir_url(__FILE__));
 require_once(AIRBNB_ANALYZER_PATH . 'includes/shortcode.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/analyzer.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/api.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/settings.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/claude-api.php');
 
 // Register activation hook
 register_activation_hook(__FILE__, 'airbnb_analyzer_activate');
@@ -90,8 +92,12 @@ function airbnb_analyzer_process_request() {
         wp_send_json_error(array('message' => 'Unable to retrieve listing data. Please check the URL and try again.'));
     }
     
-    // Analyze listing
-    $analysis = airbnb_analyzer_analyze_listing($listing_data);
+    // Analyze listing with Claude if API key is available
+    if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
+        $analysis = airbnb_analyzer_analyze_listing_with_claude($listing_data);
+    } else {
+        $analysis = airbnb_analyzer_analyze_listing($listing_data);
+    }
     
     // Return results
     wp_send_json_success($analysis);
