@@ -3,23 +3,47 @@
  */
 
 jQuery(document).ready(function($) {
-    // Handle form submission
-    $('#airbnb-analyzer-form').on('submit', function(e) {
-        e.preventDefault();
+    // Store the listing URL
+    var listingUrl = '';
+    
+    // Handle "Continue" button click (Step 1 to Step 2)
+    $('#airbnb-analyzer-next-step').on('click', function() {
+        listingUrl = $('#airbnb-listing-url').val();
         
-        // Get listing URL
-        var listingUrl = $('#airbnb-listing-url').val();
-        
-        // Validate URL
-        if (!listingUrl || !listingUrl.includes('airbnb.com')) {
+        if (!listingUrl) {
             alert('Please enter a valid AirBnB listing URL');
             return;
         }
         
+        // Hide Step 1, show Step 2
+        $('#airbnb-analyzer-step-1').hide();
+        $('#airbnb-analyzer-step-2').show();
+    });
+    
+    // Handle "Back" button click (Step 2 to Step 1)
+    $('#airbnb-analyzer-back').on('click', function() {
+        $('#airbnb-analyzer-step-2').hide();
+        $('#airbnb-analyzer-step-1').show();
+    });
+    
+    // Handle form submission
+    $('#airbnb-analyzer-submit').on('click', function() {
+        var email = $('#airbnb-analyzer-email').val();
+        var captchaResponse = grecaptcha.getResponse();
+        
+        if (!email) {
+            alert('Please enter your email address');
+            return;
+        }
+        
+        if (!captchaResponse) {
+            alert('Please complete the CAPTCHA');
+            return;
+        }
+        
         // Show loading indicator
-        $('#airbnb-analyzer-results').show();
+        $('.airbnb-analyzer-step').hide();
         $('.airbnb-analyzer-loading').show();
-        $('.airbnb-analyzer-content').hide();
         
         // Send AJAX request
         $.ajax({
@@ -28,7 +52,9 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'analyze_airbnb_listing',
                 nonce: airbnb_analyzer_ajax.nonce,
-                listing_url: listingUrl
+                listing_url: listingUrl,
+                email: email,
+                captcha: captchaResponse
             },
             success: function(response) {
                 // Hide loading indicator
@@ -38,16 +64,21 @@ jQuery(document).ready(function($) {
                     // Display results
                     displayResults(response.data);
                 } else {
-                    // Display error
-                    displayError(response.data.message);
+                    // Show error message
+                    alert(response.data.message || 'An error occurred. Please try again.');
+                    // Go back to step 1
+                    $('#airbnb-analyzer-step-1').show();
                 }
             },
             error: function() {
                 // Hide loading indicator
                 $('.airbnb-analyzer-loading').hide();
                 
-                // Display error
-                displayError('An error occurred while analyzing the listing. Please try again.');
+                // Show error message
+                alert('An error occurred. Please try again.');
+                
+                // Go back to step 1
+                $('#airbnb-analyzer-step-1').show();
             }
         });
     });
@@ -197,17 +228,6 @@ jQuery(document).ready(function($) {
         html += '</div>';
         
         // Display results
-        $('.airbnb-analyzer-content').html(html).show();
-    }
-    
-    /**
-     * Display error message
-     */
-    function displayError(message) {
-        var html = '<div class="airbnb-analyzer-error">';
-        html += '<p>' + message + '</p>';
-        html += '</div>';
-        
         $('.airbnb-analyzer-content').html(html).show();
     }
     

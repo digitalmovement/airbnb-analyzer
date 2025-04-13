@@ -291,4 +291,38 @@
 .claude-alternatives ul, .claude-suggestions ul {
     margin: 0;
     padding-left: 20px;
+}
+
+/* Multi-step form styles */
+.airbnb-analyzer-step {
+    margin-bottom: 30px;
+}
+
+.airbnb-analyzer-back-button {
+    background: #666;
+    margin-left: 10px;
+}
+
+.airbnb-analyzer-back-button:hover {
+    background: #555;
+}
+
+.airbnb-analyzer-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #FF5A5F;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 2s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* CAPTCHA container */
+#airbnb-analyzer-captcha {
+    margin-bottom: 15px;
 } 

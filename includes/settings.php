@@ -18,6 +18,8 @@ add_action('admin_menu', 'airbnb_analyzer_add_settings_page');
 // Register settings
 function airbnb_analyzer_register_settings() {
     register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_claude_api_key');
+    register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_recaptcha_site_key');
+    register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_recaptcha_secret_key');
 }
 add_action('admin_init', 'airbnb_analyzer_register_settings');
 
@@ -29,6 +31,8 @@ function airbnb_analyzer_settings_page() {
         <form method="post" action="options.php">
             <?php settings_fields('airbnb_analyzer_settings'); ?>
             <?php do_settings_sections('airbnb_analyzer_settings'); ?>
+            
+            <h2>API Settings</h2>
             <table class="form-table">
                 <tr valign="top">
                     <th scope="row">Claude API Key</th>
@@ -38,6 +42,26 @@ function airbnb_analyzer_settings_page() {
                     </td>
                 </tr>
             </table>
+            
+            <h2>reCAPTCHA Settings</h2>
+            <p>Get your reCAPTCHA v2 keys from <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA</a>.</p>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">Site Key</th>
+                    <td>
+                        <input type="text" name="airbnb_analyzer_recaptcha_site_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_recaptcha_site_key')); ?>" class="regular-text" />
+                        <p class="description">Enter your reCAPTCHA site key.</p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Secret Key</th>
+                    <td>
+                        <input type="password" name="airbnb_analyzer_recaptcha_secret_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_recaptcha_secret_key')); ?>" class="regular-text" />
+                        <p class="description">Enter your reCAPTCHA secret key.</p>
+                    </td>
+                </tr>
+            </table>
+            
             <?php submit_button(); ?>
         </form>
     </div>
