@@ -118,92 +118,55 @@ function construct_airbnb_api_url($listing_id) {
  * @return array The parsed listing data
  */
 function parse_airbnb_api_response($data, $listing_id) {
-    // Initialize listing data with default values
+    // Initialize listing data array
     $listing_data = array(
         'id' => $listing_id,
         'title' => '',
         'description' => '',
+        'photos' => array(),
+        'price' => 0,
+        'price_currency' => '',
         'location' => '',
-        'host_name' => '',
-        'host_since' => '',
-        'host_is_superhost' => false,
-        'property_type' => '',
-        'room_type' => '',
         'bedrooms' => 0,
         'bathrooms' => 0,
         'beds' => 0,
         'max_guests' => 0,
-        'price' => 0,
-        'price_currency' => 'USD',
+        'amenities' => array(),
+        'host_name' => '',
+        'host_since' => '',
+        'host_is_superhost' => false,
         'rating' => 0,
         'review_count' => 0,
-        'amenities' => array(),
-        'photos' => array(),
         'house_rules' => '',
-        'cancellation_policy' => '',
-        'check_in' => '',
-        'check_out' => '',
+        'cancellation_policy' => ''
     );
     
     try {
         // Check if we have the expected data structure
         if (!isset($data['data']['presentation']['stayProductDetailPage']['sections']['sections'])) {
-            return $listing_data;
+            return new WP_Error('invalid_response', 'Unexpected API response structure');
         }
         
         $sections = $data['data']['presentation']['stayProductDetailPage']['sections'];
         
-        // Extract metadata if available
-        if (isset($data['data']['presentation']['stayProductDetailPage']['sections']['metadata']['sharingConfig'])) {
-            $sharing_config = $data['data']['presentation']['stayProductDetailPage']['sections']['metadata']['sharingConfig'];
-            
-            if (isset($sharing_config['title'])) {
-                $listing_data['title'] = $sharing_config['title'];
-            }
-            
-            if (isset($sharing_config['propertyType'])) {
-                $listing_data['property_type'] = $sharing_config['propertyType'];
-            }
-            
-            if (isset($sharing_config['location'])) {
-                $listing_data['location'] = $sharing_config['location'];
-            }
-            
-            if (isset($sharing_config['personCapacity'])) {
-                $listing_data['max_guests'] = (int)$sharing_config['personCapacity'];
-            }
-            
-            if (isset($sharing_config['imageUrl'])) {
-                $listing_data['photos'][] = $sharing_config['imageUrl'];
-            }
-            
-            if (isset($sharing_config['reviewCount'])) {
-                $listing_data['review_count'] = (int)$sharing_config['reviewCount'];
-            }
-            
-            if (isset($sharing_config['starRating'])) {
-                $listing_data['rating'] = (float)$sharing_config['starRating'];
-            }
-        }
-        
-        // Extract photos from PHOTO_TOUR section
+        // Extract title
         foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'PHOTO_TOUR_SCROLLABLE_MODAL') {
-                if (isset($section['section']['mediaItems'])) {
-                    foreach ($section['section']['mediaItems'] as $media_item) {
-                        if (isset($media_item['baseUrl'])) {
-                            $listing_data['photos'][] = $media_item['baseUrl'];
-                        }
-                    }
+            if (isset($section['sectionId']) && $section['sectionId'] === 'TITLE_DEFAULT') {
+                if (isset($section['section']['title'])) {
+                    $listing_data['title'] = $section['section']['title'];
                 }
                 break;
             }
         }
         
-        // Extract description from DESCRIPTION_MODAL section
+        // Extract description
         foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'DESCRIPTION_MODAL') {
-                if (isset($section['section']['items'])) {
+            if (isset($section['sectionId']) && $section['sectionId'] === 'DESCRIPTION_DEFAULT') {
+                if (isset($section['section']['htmlDescription']['htmlText'])) {
+                    $listing_data['description'] = $section['section']['htmlDescription']['htmlText'];
+                } elseif (isset($section['section']['description'])) {
+                    $listing_data['description'] = $section['section']['description'];
+                } elseif (isset($section['section']['items'])) {
                     $description = '';
                     foreach ($section['section']['items'] as $item) {
                         if (isset($item['html']['htmlText'])) {
@@ -211,6 +174,41 @@ function parse_airbnb_api_response($data, $listing_id) {
                         }
                     }
                     $listing_data['description'] = trim($description);
+                }
+                break;
+            }
+        }
+        
+        // Extract photos
+        foreach ($sections['sections'] as $section) {
+            if (isset($section['sectionId']) && $section['sectionId'] === 'PHOTO_TOUR_SCROLLABLE_MODAL') {
+                if (isset($section['section']['mediaItems'])) {
+                    foreach ($section['section']['mediaItems'] as $media) {
+                        if (isset($media['baseUrl'])) {
+                            $listing_data['photos'][] = $media['baseUrl'];
+                        }
+                    }
+                }
+                break;
+            } elseif (isset($section['sectionId']) && $section['sectionId'] === 'HERO_DEFAULT') {
+                if (isset($section['section']['mediaItems'])) {
+                    foreach ($section['section']['mediaItems'] as $media) {
+                        if (isset($media['baseUrl'])) {
+                            $listing_data['photos'][] = $media['baseUrl'];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Extract ratings and reviews
+        foreach ($sections['sections'] as $section) {
+            if (isset($section['sectionId']) && $section['sectionId'] === 'REVIEWS_DEFAULT') {
+                if (isset($section['section']['overallRating'])) {
+                    $listing_data['rating'] = (float)$section['section']['overallRating'];
+                }
+                if (isset($section['section']['reviewsCount'])) {
+                    $listing_data['review_count'] = (int)$section['section']['reviewsCount'];
                 }
                 break;
             }
@@ -262,10 +260,40 @@ function parse_airbnb_api_response($data, $listing_id) {
             }
         }
         
-        // Extract amenities
+        // Extract amenities - UPDATED to handle both previewAmenitiesGroups and seeAllAmenitiesGroups
         foreach ($sections['sections'] as $section) {
             if (isset($section['sectionId']) && $section['sectionId'] === 'AMENITIES_DEFAULT') {
-                if (isset($section['section']['amenityGroups'])) {
+                // Check for preview amenities
+                if (isset($section['section']['previewAmenitiesGroups'])) {
+                    foreach ($section['section']['previewAmenitiesGroups'] as $group) {
+                        if (isset($group['amenities'])) {
+                            foreach ($group['amenities'] as $amenity) {
+                                if (isset($amenity['title']) && $amenity['available'] === true) {
+                                    $listing_data['amenities'][] = $amenity['title'];
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Check for all amenities
+                if (isset($section['section']['seeAllAmenitiesGroups'])) {
+                    foreach ($section['section']['seeAllAmenitiesGroups'] as $group) {
+                        if (isset($group['amenities'])) {
+                            foreach ($group['amenities'] as $amenity) {
+                                if (isset($amenity['title']) && $amenity['available'] === true) {
+                                    // Avoid duplicates
+                                    if (!in_array($amenity['title'], $listing_data['amenities'])) {
+                                        $listing_data['amenities'][] = $amenity['title'];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we still don't have amenities, try the old structure
+                if (empty($listing_data['amenities']) && isset($section['section']['amenityGroups'])) {
                     foreach ($section['section']['amenityGroups'] as $group) {
                         if (isset($group['amenities'])) {
                             foreach ($group['amenities'] as $amenity) {
@@ -276,6 +304,7 @@ function parse_airbnb_api_response($data, $listing_id) {
                         }
                     }
                 }
+                
                 break;
             }
         }
