@@ -192,6 +192,9 @@ function airbnb_analyzer_claude_analyze_host($listing_data) {
     $host_response_rate = isset($listing_data['host_response_rate']) ? $listing_data['host_response_rate'] : '';
     $host_response_time = isset($listing_data['host_response_time']) ? $listing_data['host_response_time'] : '';
     $host_highlights = isset($listing_data['host_highlights']) ? implode("\n", $listing_data['host_highlights']) : '';
+    $neighborhood_details = isset($listing_data['neighborhood_details']) ? $listing_data['neighborhood_details'] : '';
+    $host_rating = isset($listing_data['host_rating']) ? $listing_data['host_rating'] : '';
+    $host_review_count = isset($listing_data['host_review_count']) ? $listing_data['host_review_count'] : '';
     
     $prompt = "You are an Airbnb host optimization expert. Please analyze this host profile and provide feedback:
     
@@ -200,21 +203,28 @@ Superhost: $host_is_superhost
 About: \"$host_about\"
 Response Rate: $host_response_rate
 Response Time: $host_response_time
+Host Rating: $host_rating
+Host Review Count: $host_review_count
 Host Highlights: 
 $host_highlights
+Neighborhood Details:
+$neighborhood_details
 
 Please analyze:
 1. Overall profile completeness (1-10)
-2. Bio quality and optimal length
+2. Bio quality and optimal length (150-250 words is ideal)
 3. Response rate and time effectiveness
 4. Neighborhood highlights completeness
-5. Specific improvement suggestions
+5. Rating and review quality
+6. Specific improvement suggestions
 
 Format your response as JSON with these fields:
 - completeness_score: (number)
 - bio_feedback: (string)
 - response_feedback: (string)
 - highlights_feedback: (string)
+- neighborhood_feedback: (string)
+- rating_feedback: (string)
 - suggestions: (array of strings)";
     
     $response = airbnb_analyzer_claude_request($prompt);

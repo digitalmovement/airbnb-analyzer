@@ -138,12 +138,25 @@ jQuery(document).ready(function($) {
                 html += '<div class="claude-section">';
                 html += '<h4>Host Profile Analysis</h4>';
                 html += '<div class="claude-rating">Completeness: <span class="' + getScoreClass(data.claude_analysis.host.completeness_score * 10) + '">' + data.claude_analysis.host.completeness_score + '/10</span></div>';
+                
                 html += '<h5>Bio Feedback:</h5>';
                 html += '<p>' + data.claude_analysis.host.bio_feedback + '</p>';
+                
                 html += '<h5>Response Feedback:</h5>';
                 html += '<p>' + data.claude_analysis.host.response_feedback + '</p>';
+                
                 html += '<h5>Highlights Feedback:</h5>';
                 html += '<p>' + data.claude_analysis.host.highlights_feedback + '</p>';
+                
+                if (data.claude_analysis.host.neighborhood_feedback) {
+                    html += '<h5>Neighborhood Feedback:</h5>';
+                    html += '<p>' + data.claude_analysis.host.neighborhood_feedback + '</p>';
+                }
+                
+                if (data.claude_analysis.host.rating_feedback) {
+                    html += '<h5>Rating Feedback:</h5>';
+                    html += '<p>' + data.claude_analysis.host.rating_feedback + '</p>';
+                }
                 
                 if (data.claude_analysis.host.suggestions && data.claude_analysis.host.suggestions.length > 0) {
                     html += '<div class="claude-suggestions">';
@@ -155,6 +168,7 @@ jQuery(document).ready(function($) {
                     html += '</ul>';
                     html += '</div>';
                 }
+                
                 html += '</div>';
             }
             

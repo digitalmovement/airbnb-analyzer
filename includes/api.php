@@ -135,6 +135,11 @@ function parse_airbnb_api_response($data, $listing_id) {
         'host_name' => '',
         'host_since' => '',
         'host_is_superhost' => false,
+        'host_about' => '',
+        'host_response_rate' => '',
+        'host_response_time' => '',
+        'host_highlights' => array(),
+        'neighborhood_details' => '',
         'rating' => 0,
         'review_count' => 0,
         'house_rules' => '',
@@ -216,25 +221,64 @@ function parse_airbnb_api_response($data, $listing_id) {
         
         // Extract host information
         foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'HOST_PROFILE_DEFAULT') {
-                if (isset($section['section']['hostAvatar']['name'])) {
-                    $listing_data['host_name'] = $section['section']['hostAvatar']['name'];
+            if (isset($section['sectionId']) && $section['sectionId'] === 'MEET_YOUR_HOST') {
+                if (isset($section['section']['cardData'])) {
+                    $host_data = $section['section']['cardData'];
+                    if (isset($host_data['name'])) {
+                        $listing_data['host_name'] = $host_data['name'];
+                    }
+                    if (isset($host_data['isSuperhost'])) {
+                        $listing_data['host_is_superhost'] = $host_data['isSuperhost'];
+                    }
+                    if (isset($host_data['timeAsHost']['years'])) {
+                        $years = $host_data['timeAsHost']['years'];
+                        $months = isset($host_data['timeAsHost']['months']) ? $host_data['timeAsHost']['months'] : 0;
+                        $listing_data['host_since'] = $years . ' years, ' . $months . ' months';
+                    }
+                    if (isset($host_data['ratingAverage'])) {
+                        $listing_data['host_rating'] = $host_data['ratingAverage'];
+                    }
+                    if (isset($host_data['ratingCount'])) {
+                        $listing_data['host_review_count'] = $host_data['ratingCount'];
+                    }
                 }
-                if (isset($section['section']['hostSince'])) {
-                    $listing_data['host_since'] = $section['section']['hostSince'];
+                
+                // Extract host about text
+                if (isset($section['section']['about'])) {
+                    $listing_data['host_about'] = $section['section']['about'];
                 }
-                if (isset($section['section']['hostAvatar']['isSuperhost'])) {
-                    $listing_data['host_is_superhost'] = (bool)$section['section']['hostAvatar']['isSuperhost'];
+                
+                // Extract host highlights
+                if (isset($section['section']['hostHighlights'])) {
+                    foreach ($section['section']['hostHighlights'] as $highlight) {
+                        if (isset($highlight['title'])) {
+                            $listing_data['host_highlights'][] = $highlight['title'];
+                        }
+                    }
                 }
+                
+                // Extract host response details
+                if (isset($section['section']['hostDetails'])) {
+                    foreach ($section['section']['hostDetails'] as $detail) {
+                        if (strpos($detail, 'Response rate:') !== false) {
+                            $listing_data['host_response_rate'] = trim(str_replace('Response rate:', '', $detail));
+                        } elseif (strpos($detail, 'Responds') !== false) {
+                            $listing_data['host_response_time'] = $detail;
+                        }
+                    }
+                }
+                
                 break;
             }
         }
         
-        // Extract location
+        // Extract neighborhood details
         foreach ($sections['sections'] as $section) {
             if (isset($section['sectionId']) && $section['sectionId'] === 'LOCATION_DEFAULT') {
                 if (isset($section['section']['subtitle'])) {
-                    $listing_data['location'] = $section['section']['subtitle'];
+                    $listing_data['neighborhood_details'] = $section['section']['subtitle'];
+                } elseif (isset($section['section']['locationDetails'])) {
+                    $listing_data['neighborhood_details'] = $section['section']['locationDetails'];
                 }
                 break;
             }
