@@ -3,6 +3,11 @@
  * Settings functionality for AirBnB Listing Analyzer
  */
 
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 // Add settings page
 function airbnb_analyzer_add_settings_page() {
     add_options_page(
@@ -15,11 +20,18 @@ function airbnb_analyzer_add_settings_page() {
 }
 add_action('admin_menu', 'airbnb_analyzer_add_settings_page');
 
-// Register settings
+/**
+ * Register plugin settings
+ */
 function airbnb_analyzer_register_settings() {
-    register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_claude_api_key');
-    register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_recaptcha_site_key');
-    register_setting('airbnb_analyzer_settings', 'airbnb_analyzer_recaptcha_secret_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_site_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_secret_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_enable_debugging', array(
+        'type' => 'boolean',
+        'default' => false,
+        'sanitize_callback' => 'rest_sanitize_boolean',
+    ));
 }
 add_action('admin_init', 'airbnb_analyzer_register_settings');
 
@@ -29,8 +41,8 @@ function airbnb_analyzer_settings_page() {
     <div class="wrap">
         <h1>AirBnB Analyzer Settings</h1>
         <form method="post" action="options.php">
-            <?php settings_fields('airbnb_analyzer_settings'); ?>
-            <?php do_settings_sections('airbnb_analyzer_settings'); ?>
+            <?php settings_fields('airbnb_analyzer_options'); ?>
+            <?php do_settings_sections('airbnb_analyzer_options'); ?>
             
             <h2>API Settings</h2>
             <table class="form-table">
