@@ -132,12 +132,7 @@ function airbnb_analyzer_get_listing_data($listing_url) {
  * @return string The API URL
  */
 function construct_airbnb_api_url($listing_id) {
-    // Current date for check-in (today + 30 days)
-    $check_in = date('Y-m-d', strtotime('+30 days'));
-    // Check-out (check-in + 5 days)
-    $check_out = date('Y-m-d', strtotime($check_in . ' +5 days'));
-    
-    // Construct the GraphQL API URL
+    // Construct the GraphQL query parameters
     $variables = array(
         'id' => "StayListing:$listing_id",
         'pdpSectionsRequest' => array(
@@ -145,8 +140,8 @@ function construct_airbnb_api_url($listing_id) {
             'children' => '0',
             'infants' => '0',
             'pets' => 0,
-            'checkIn' => $check_in,
-            'checkOut' => $check_out,
+            'checkIn' => date('Y-m-d', strtotime('+1 month')),
+            'checkOut' => date('Y-m-d', strtotime('+1 month +5 days')),
             'layouts' => array('SIDEBAR', 'SINGLE_COLUMN')
         )
     );
@@ -158,14 +153,17 @@ function construct_airbnb_api_url($listing_id) {
         )
     );
     
-    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
-    $url .= '?operationName=StaysPdpSections';
-    $url .= '&locale=en-US';
-    $url .= '&currency=USD';
-    $url .= '&variables=' . urlencode(json_encode($variables));
-    $url .= '&extensions=' . urlencode(json_encode($extensions));
+    // Build the URL
+    $base_url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
+    $query_params = array(
+        'operationName' => 'StaysPdpSections',
+        'locale' => 'en-US',
+        'currency' => 'USD',
+        'variables' => json_encode($variables),
+        'extensions' => json_encode($extensions)
+    );
     
-    return $url;
+    return $base_url . '?' . http_build_query($query_params);
 }
 
 /**
@@ -234,37 +232,32 @@ function parse_airbnb_api_response($data, $listing_id) {
                     
                     if (isset($sharing['title'])) {
                         $listing_data['title'] = $sharing['title'];
-                        $parsing_steps[] = "Extracted title from sharingConfig: " . $sharing['title'];
+                        $parsing_steps[] = "Extracted title from sharingConfig";
                     }
                     
                     if (isset($sharing['propertyType'])) {
                         $listing_data['property_type'] = $sharing['propertyType'];
-                        $parsing_steps[] = "Extracted property_type from sharingConfig: " . $sharing['propertyType'];
+                        $parsing_steps[] = "Extracted property_type from sharingConfig";
                     }
                     
                     if (isset($sharing['location'])) {
                         $listing_data['location'] = $sharing['location'];
-                        $parsing_steps[] = "Extracted location from sharingConfig: " . $sharing['location'];
+                        $parsing_steps[] = "Extracted location from sharingConfig";
                     }
                     
                     if (isset($sharing['personCapacity'])) {
                         $listing_data['max_guests'] = intval($sharing['personCapacity']);
-                        $parsing_steps[] = "Extracted max_guests from sharingConfig: " . $sharing['personCapacity'];
+                        $parsing_steps[] = "Extracted max_guests from sharingConfig";
                     }
                     
                     if (isset($sharing['reviewCount'])) {
                         $listing_data['review_count'] = intval($sharing['reviewCount']);
-                        $parsing_steps[] = "Extracted review_count from sharingConfig: " . $sharing['reviewCount'];
+                        $parsing_steps[] = "Extracted review_count from sharingConfig";
                     }
                     
                     if (isset($sharing['starRating'])) {
                         $listing_data['rating'] = floatval($sharing['starRating']);
-                        $parsing_steps[] = "Extracted rating from sharingConfig: " . $sharing['starRating'];
-                    }
-                    
-                    if (isset($sharing['imageUrl'])) {
-                        $listing_data['photos'][] = $sharing['imageUrl'];
-                        $parsing_steps[] = "Added primary photo from sharingConfig";
+                        $parsing_steps[] = "Extracted rating from sharingConfig";
                     }
                 }
                 
@@ -273,77 +266,17 @@ function parse_airbnb_api_response($data, $listing_id) {
                     $parsing_steps[] = "Processing loggingContext";
                     $event_data = $metadata['loggingContext']['eventDataLogging'];
                     
-                    if (isset($event_data['roomType'])) {
-                        $listing_data['property_type'] = $event_data['roomType'];
-                        $parsing_steps[] = "Extracted property_type from loggingContext: " . $event_data['roomType'];
-                    }
-                    
-                    if (isset($event_data['personCapacity'])) {
-                        $listing_data['max_guests'] = intval($event_data['personCapacity']);
-                        $parsing_steps[] = "Extracted max_guests from loggingContext: " . $event_data['personCapacity'];
-                    }
-                    
-                    if (isset($event_data['guestSatisfactionOverall'])) {
-                        $listing_data['rating'] = floatval($event_data['guestSatisfactionOverall']);
-                        $parsing_steps[] = "Extracted rating from loggingContext: " . $event_data['guestSatisfactionOverall'];
-                    }
-                    
-                    if (isset($event_data['visibleReviewCount'])) {
-                        $listing_data['review_count'] = intval($event_data['visibleReviewCount']);
-                        $parsing_steps[] = "Extracted review_count from loggingContext: " . $event_data['visibleReviewCount'];
-                    }
-                    
-                    if (isset($event_data['isSuperhost'])) {
-                        $listing_data['host_is_superhost'] = (bool)$event_data['isSuperhost'];
-                        $parsing_steps[] = "Extracted host_is_superhost from loggingContext: " . ($event_data['isSuperhost'] ? 'true' : 'false');
-                    }
-                    
-                    // Extract property rating details
-                    $rating_fields = array(
-                        'accuracyRating' => 'Accuracy',
-                        'checkinRating' => 'Check-in',
-                        'cleanlinessRating' => 'Cleanliness',
-                        'communicationRating' => 'Communication',
-                        'locationRating' => 'Location',
-                        'valueRating' => 'Value'
-                    );
-                    
-                    foreach ($rating_fields as $field => $label) {
-                        if (isset($event_data[$field])) {
-                            $listing_data['property_rating_details'][] = array(
-                                'category' => $label,
-                                'rating' => floatval($event_data[$field])
-                            );
-                            $parsing_steps[] = "Extracted $label rating: " . $event_data[$field];
-                        }
-                    }
-                    
-                    // Extract amenities from amenities array
+                    // Extract amenities
                     if (isset($event_data['amenities']) && is_array($event_data['amenities'])) {
                         $amenity_map = array(
                             1 => 'TV',
                             4 => 'Wifi',
                             8 => 'Kitchen',
-                            9 => 'Paid parking on premises',
-                            15 => 'Smoking allowed',
-                            30 => 'Heating',
-                            33 => 'Washer',
-                            34 => 'Dryer',
-                            35 => 'Smoke alarm',
-                            37 => 'Carbon monoxide alarm',
-                            39 => 'Laptop-friendly workspace',
-                            40 => 'Breakfast',
-                            41 => 'Indoor fireplace',
-                            44 => 'Hangers',
-                            45 => 'Hair dryer',
-                            46 => 'Iron',
-                            47 => 'Pool',
-                            51 => 'Self check-in',
-                            54 => 'Lockbox',
-                            89 => 'Free parking on premises',
-                            92 => 'Hot water',
-                            96 => 'Bed linens',
-                            99 => 'Extra pillows and blankets',
+                            9 => 'Free parking on premises',
+                            15 => 'Washer',
+                            30 => 'Hair dryer',
+                            33 => 'Dryer',
+                            51 => 'Lake access',
                             133 => 'Dedicated workspace'
                         );
                         
@@ -472,5 +405,4 @@ function parse_airbnb_api_response($data, $listing_id) {
     
     return $listing_data;
 }
-?> 
-?> 
+?>
