@@ -392,8 +392,8 @@ function airbnb_analyzer_debug_fetch_callback() {
     
     $url = sanitize_text_field($_POST['url']);
     
-    // Extract listing ID from URL
-    if (preg_match('/\/rooms\/(\d+)/', $url, $matches)) {
+    // Extract listing ID from URL - updated to handle international domains
+    if (preg_match('/airbnb\.[a-z\.]+\/rooms\/(\d+)/', $url, $matches)) {
         $listing_id = $matches[1];
     } else {
         wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format. Please use a URL like https://www.airbnb.com/rooms/12345'));

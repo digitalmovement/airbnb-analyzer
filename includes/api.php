@@ -10,8 +10,8 @@
  * @return array|WP_Error Listing data or error
  */
 function airbnb_analyzer_get_listing_data($listing_url) {
-    // Extract listing ID from URL
-    if (preg_match('/\/rooms\/(\d+)/', $listing_url, $matches)) {
+    // Extract listing ID from URL - updated to handle international domains
+    if (preg_match('/airbnb\.[a-z\.]+\/rooms\/(\d+)/', $listing_url, $matches)) {
         $listing_id = $matches[1];
     } elseif (preg_match('/\/h\/([^\/\?]+)/', $listing_url, $matches)) {
         // Handle /h/ style URLs
