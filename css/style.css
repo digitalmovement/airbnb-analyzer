@@ -401,4 +401,48 @@
     padding: 3px 8px;
     border-radius: 4px;
     margin-top: 8px;
+}
+
+/* Debug styles */
+.airbnb-analyzer-debug {
+    margin-top: 30px;
+    padding: 20px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.debug-toggle {
+    margin-bottom: 15px;
+}
+
+.debug-toggle button {
+    background: #008489;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.debug-toggle button:hover {
+    background: #006c70;
+}
+
+.debug-section {
+    background: #fff;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    overflow: auto;
+    max-height: 500px;
+}
+
+.debug-section pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: monospace;
+    font-size: 12px;
 } 

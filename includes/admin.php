@@ -104,4 +104,38 @@ function airbnb_analyzer_export_emails_csv() {
     // Close the file pointer
     fclose($output);
     exit;
+}
+
+/**
+ * Render the settings page
+ */
+function airbnb_analyzer_settings_page() {
+    ?>
+    <div class="wrap">
+        <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('airbnb_analyzer_options');
+            do_settings_sections('airbnb_analyzer_options');
+            ?>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">Claude API Key</th>
+                    <td>
+                        <input type="text" name="airbnb_analyzer_claude_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_claude_api_key')); ?>" class="regular-text" />
+                        <p class="description">Enter your Claude API key to enable AI analysis.</p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Enable Debugging</th>
+                    <td>
+                        <input type="checkbox" name="airbnb_analyzer_enable_debugging" value="1" <?php checked(get_option('airbnb_analyzer_enable_debugging'), true); ?> />
+                        <p class="description">Show raw API data and extracted data for debugging purposes.</p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
 } 

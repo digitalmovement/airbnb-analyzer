@@ -168,4 +168,17 @@ function airbnb_analyzer_store_email($email, $listing_url) {
         )
     );
 }
+
+/**
+ * Register plugin settings
+ */
+function airbnb_analyzer_register_settings() {
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_enable_debugging', array(
+        'type' => 'boolean',
+        'default' => false,
+        'sanitize_callback' => 'rest_sanitize_boolean',
+    ));
+}
+add_action('admin_init', 'airbnb_analyzer_register_settings');
 ?> 

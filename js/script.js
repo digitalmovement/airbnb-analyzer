@@ -369,8 +369,42 @@ jQuery(document).ready(function($) {
         
         html += '</div>';
         
+        // Add debugging section if enabled
+        if (data._debug) {
+            html += '<div class="airbnb-analyzer-debug">';
+            html += '<h3>Debugging Information</h3>';
+            
+            html += '<div class="debug-toggle">';
+            html += '<button class="toggle-raw-data">Toggle Raw API Data</button>';
+            html += '<button class="toggle-extracted-data">Toggle Extracted Data</button>';
+            html += '</div>';
+            
+            html += '<div class="debug-section raw-data" style="display:none;">';
+            html += '<h4>Raw API Data</h4>';
+            html += '<pre>' + JSON.stringify(data._debug.raw_data, null, 2) + '</pre>';
+            html += '</div>';
+            
+            html += '<div class="debug-section extracted-data" style="display:none;">';
+            html += '<h4>Extracted Data</h4>';
+            html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            html += '</div>';
+            
+            html += '</div>';
+        }
+        
         // Display results
         $('.airbnb-analyzer-content').html(html).show();
+        
+        // Add event listeners for debug toggles
+        if (data._debug) {
+            $('.toggle-raw-data').on('click', function() {
+                $('.debug-section.raw-data').toggle();
+            });
+            
+            $('.toggle-extracted-data').on('click', function() {
+                $('.debug-section.extracted-data').toggle();
+            });
+        }
     }
     
     /**
