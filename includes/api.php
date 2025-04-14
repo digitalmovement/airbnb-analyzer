@@ -159,16 +159,34 @@ function parse_airbnb_api_response($data, $listing_id) {
     );
     
     try {
-        // Extract sections from API response
-        $sections = $data['data']['presentation']['stayProductDetailPage']['sections'];
-        
-        // Extract title and description
-        foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'TITLE_DEFAULT') {
-                if (isset($section['section']['title'])) {
-                    $listing_data['title'] = $section['section']['title'];
+        // Extract description from DESCRIPTION_MODAL section
+        if (isset($data['data']['presentation']['stayProductDetailPage']['sections']['sections'])) {
+            foreach ($data['data']['presentation']['stayProductDetailPage']['sections']['sections'] as $section) {
+                if (isset($section['sectionId']) && $section['sectionId'] === 'DESCRIPTION_MODAL') {
+                    if (isset($section['section']['items']) && is_array($section['section']['items'])) {
+                        $full_description = '';
+                        
+                        // Loop through all items to get the full description
+                        foreach ($section['section']['items'] as $item) {
+                            if (isset($item['html']['htmlText'])) {
+                                // The second item usually contains the full description with "The space" title
+                                if (isset($item['title']) && $item['title'] === 'The space') {
+                                    $listing_data['description'] = $item['html']['htmlText'];
+                                    break;
+                                } else if (empty($full_description)) {
+                                    // Store the first item as a fallback
+                                    $full_description = $item['html']['htmlText'];
+                                }
+                            }
+                        }
+                        
+                        // If we didn't find "The space" section, use the first description
+                        if (empty($listing_data['description']) && !empty($full_description)) {
+                            $listing_data['description'] = $full_description;
+                        }
+                    }
+                    break;
                 }
-                break;
             }
         }
         
