@@ -91,240 +91,306 @@ function airbnb_analyzer_settings_page() {
                     <td>
                         <label>
                             <input type="checkbox" name="airbnb_analyzer_enable_debugging" value="1" <?php checked(get_option('airbnb_analyzer_enable_debugging'), true); ?> />
-                            Show debugging information in analysis results
+                            Show debug information for troubleshooting
                         </label>
-                        <p class="description">When enabled, debugging information will be displayed at the bottom of analysis results.</p>
+                        <p class="description">When enabled, debug information will be shown on the listing analysis page.</p>
                     </td>
                 </tr>
                 <tr valign="top">
                     <th scope="row">Debug Level</th>
                     <td>
                         <select name="airbnb_analyzer_debug_level">
-                            <option value="basic" <?php selected(get_option('airbnb_analyzer_debug_level'), 'basic'); ?>>Basic (API response and extracted data)</option>
-                            <option value="advanced" <?php selected(get_option('airbnb_analyzer_debug_level'), 'advanced'); ?>>Advanced (includes API request details and parsing steps)</option>
-                            <option value="full" <?php selected(get_option('airbnb_analyzer_debug_level'), 'full'); ?>>Full (all available debugging information)</option>
+                            <option value="basic" <?php selected(get_option('airbnb_analyzer_debug_level'), 'basic'); ?>>Basic - Show raw API data</option>
+                            <option value="advanced" <?php selected(get_option('airbnb_analyzer_debug_level'), 'advanced'); ?>>Advanced - Show API data and request details</option>
+                            <option value="full" <?php selected(get_option('airbnb_analyzer_debug_level'), 'full'); ?>>Full - Show all debug information</option>
                         </select>
-                        <p class="description">Select the level of detail for debugging information.</p>
+                        <p class="description">Select how much debug information to display.</p>
                     </td>
                 </tr>
                 <tr valign="top">
-                    <th scope="row">Enable Debug Logging</th>
+                    <th scope="row">Enable Debug Log</th>
                     <td>
                         <label>
                             <input type="checkbox" name="airbnb_analyzer_debug_log_enabled" value="1" <?php checked(get_option('airbnb_analyzer_debug_log_enabled'), true); ?> />
-                            Log debugging information to file
+                            Log debug information to file
                         </label>
-                        <p class="description">When enabled, debugging information will be logged to a file in the plugin directory.</p>
-                        <?php if (get_option('airbnb_analyzer_debug_log_enabled')): ?>
-                            <div class="debug-log-info" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd;">
-                                <p><strong>Debug Log Location:</strong> <?php echo AIRBNB_ANALYZER_PATH . 'debug.log'; ?></p>
-                                <?php
-                                $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
-                                if (file_exists($log_file)) {
-                                    $log_size = size_format(filesize($log_file));
-                                    $log_modified = date('Y-m-d H:i:s', filemtime($log_file));
-                                    echo "<p><strong>Log Size:</strong> {$log_size} | <strong>Last Modified:</strong> {$log_modified}</p>";
-                                    echo '<p><a href="' . admin_url('admin-post.php?action=airbnb_analyzer_download_log&_wpnonce=' . wp_create_nonce('download_debug_log')) . '" class="button">Download Log</a> ';
-                                    echo '<a href="' . admin_url('admin-post.php?action=airbnb_analyzer_clear_log&_wpnonce=' . wp_create_nonce('clear_debug_log')) . '" class="button" onclick="return confirm(\'Are you sure you want to clear the debug log?\');">Clear Log</a></p>';
-                                } else {
-                                    echo "<p>No log file exists yet.</p>";
-                                }
-                                ?>
-                            </div>
-                        <?php endif; ?>
+                        <p class="description">When enabled, debug information will be logged to a file in the plugin directory.</p>
                     </td>
                 </tr>
             </table>
-            
-            <h2>Test Debugging</h2>
-            <p>Enter an Airbnb listing URL to test the debugging functionality:</p>
-            <table class="form-table">
-                <tr valign="top">
-                    <th scope="row">Airbnb Listing URL</th>
-                    <td>
-                        <input type="url" id="test-listing-url" class="regular-text" placeholder="https://www.airbnb.com/rooms/12345" />
-                        <button type="button" id="test-debug-button" class="button">Test Debug</button>
-                        <p class="description">This will fetch and display the raw data for the listing without saving any analysis.</p>
-                    </td>
-                </tr>
-            </table>
-            
-            <div id="debug-test-results" style="display: none; margin-top: 20px; padding: 15px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">
-                <h3>Debug Test Results</h3>
-                <div class="debug-toggle">
-                    <button type="button" class="button toggle-raw-data">Toggle Raw API Data</button>
-                    <button type="button" class="button toggle-extracted-data">Toggle Extracted Data</button>
-                    <button type="button" class="button toggle-request-details">Toggle Request Details</button>
-                </div>
-                
-                <div class="debug-section raw-data" style="display:none; margin-top: 15px;">
-                    <h4>Raw API Data</h4>
-                    <pre id="raw-api-data" style="background: #fff; padding: 15px; border: 1px solid #ddd; overflow: auto; max-height: 500px;"></pre>
-                </div>
-                
-                <div class="debug-section extracted-data" style="display:none; margin-top: 15px;">
-                    <h4>Extracted Data</h4>
-                    <pre id="extracted-data" style="background: #fff; padding: 15px; border: 1px solid #ddd; overflow: auto; max-height: 500px;"></pre>
-                </div>
-                
-                <div class="debug-section request-details" style="display:none; margin-top: 15px;">
-                    <h4>Request Details</h4>
-                    <pre id="request-details" style="background: #fff; padding: 15px; border: 1px solid #ddd; overflow: auto; max-height: 500px;"></pre>
-                </div>
-                
-                <div class="copy-buttons" style="margin-top: 15px;">
-                    <button type="button" class="button copy-all-debug">Copy All Debug Data</button>
-                    <span class="copy-success" style="display: none; margin-left: 10px; color: green;">Copied to clipboard!</span>
-                </div>
-            </div>
             
             <?php submit_button(); ?>
         </form>
+        
+        <hr>
+        
+        <h2>Debug Testing Tool</h2>
+        <p>Use this tool to test the API and view debug information for a specific Airbnb listing.</p>
+        
+        <div id="airbnb-analyzer-debug-tool">
+            <div class="form-group">
+                <label for="debug-listing-url">Airbnb Listing URL:</label>
+                <input type="text" id="debug-listing-url" class="regular-text" placeholder="https://www.airbnb.com/rooms/12345678" />
+                <button type="button" id="debug-fetch-btn" class="button button-primary">Fetch Debug Data</button>
+            </div>
+            
+            <div id="debug-results" style="display: none; margin-top: 20px;">
+                <h3>Debug Results</h3>
+                
+                <div class="debug-section">
+                    <div class="debug-header">
+                        <h4>Raw API Response</h4>
+                        <button type="button" class="button copy-debug-data" data-section="raw-data">Copy to Clipboard</button>
+                    </div>
+                    <div class="debug-content">
+                        <pre id="debug-raw-data" style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 10px; border: 1px solid #ddd;"></pre>
+                    </div>
+                </div>
+                
+                <div class="debug-section">
+                    <div class="debug-header">
+                        <h4>Extracted Data</h4>
+                        <button type="button" class="button copy-debug-data" data-section="extracted-data">Copy to Clipboard</button>
+                    </div>
+                    <div class="debug-content">
+                        <pre id="debug-extracted-data" style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 10px; border: 1px solid #ddd;"></pre>
+                    </div>
+                </div>
+                
+                <div class="debug-section">
+                    <div class="debug-header">
+                        <h4>Request Details</h4>
+                        <button type="button" class="button copy-debug-data" data-section="request-details">Copy to Clipboard</button>
+                    </div>
+                    <div class="debug-content">
+                        <pre id="debug-request-details" style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 10px; border: 1px solid #ddd;"></pre>
+                    </div>
+                </div>
+                
+                <div class="debug-section">
+                    <div class="debug-header">
+                        <h4>All Debug Data</h4>
+                        <button type="button" class="button copy-debug-data" data-section="all-data">Copy to Clipboard</button>
+                    </div>
+                    <div class="debug-content">
+                        <pre id="debug-all-data" style="max-height: 300px; overflow: auto; background: #f5f5f5; padding: 10px; border: 1px solid #ddd;"></pre>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="debug-error" style="display: none; margin-top: 20px; color: #d63638; padding: 10px; background: #fcf0f1; border-left: 4px solid #d63638;"></div>
+            <div id="debug-loading" style="display: none; margin-top: 20px;">
+                <span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>
+                Fetching data...
+            </div>
+        </div>
+        
+        <hr>
+        
+        <h2>Debug Log</h2>
+        <?php
+        $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
+        $log_exists = file_exists($log_file);
+        $log_size = $log_exists ? size_format(filesize($log_file)) : '0 KB';
+        ?>
+        
+        <div class="debug-log-info">
+            <p>
+                Log file: <code><?php echo esc_html($log_file); ?></code><br>
+                Size: <span id="log-size"><?php echo esc_html($log_size); ?></span>
+            </p>
+            
+            <div class="debug-log-actions">
+                <button type="button" id="view-log-btn" class="button" <?php echo !$log_exists ? 'disabled' : ''; ?>>View Log</button>
+                <button type="button" id="download-log-btn" class="button" <?php echo !$log_exists ? 'disabled' : ''; ?>>Download Log</button>
+                <button type="button" id="clear-log-btn" class="button" <?php echo !$log_exists ? 'disabled' : ''; ?>>Clear Log</button>
+            </div>
+        </div>
+        
+        <div id="debug-log-content" style="display: none; margin-top: 20px;">
+            <h3>Log Contents</h3>
+            <pre id="log-content" style="max-height: 500px; overflow: auto; background: #f5f5f5; padding: 10px; border: 1px solid #ddd;"></pre>
+        </div>
     </div>
     
     <script>
     jQuery(document).ready(function($) {
-        // Test debug button click
-        $('#test-debug-button').on('click', function() {
-            var listingUrl = $('#test-listing-url').val();
+        // Debug tool functionality
+        $('#debug-fetch-btn').on('click', function() {
+            var listingUrl = $('#debug-listing-url').val();
             if (!listingUrl) {
-                alert('Please enter a valid Airbnb listing URL');
+                alert('Please enter an Airbnb listing URL');
                 return;
             }
             
-            $(this).prop('disabled', true).text('Loading...');
+            $('#debug-results').hide();
+            $('#debug-error').hide();
+            $('#debug-loading').show();
             
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
                 data: {
-                    action: 'airbnb_analyzer_test_debug',
-                    nonce: '<?php echo wp_create_nonce('airbnb_analyzer_test_debug'); ?>',
-                    listing_url: listingUrl
+                    action: 'airbnb_analyzer_debug_fetch',
+                    listing_url: listingUrl,
+                    nonce: '<?php echo wp_create_nonce('airbnb_analyzer_debug_nonce'); ?>'
                 },
                 success: function(response) {
-                    $('#test-debug-button').prop('disabled', false).text('Test Debug');
+                    $('#debug-loading').hide();
                     
                     if (response.success) {
-                        $('#raw-api-data').text(JSON.stringify(response.data.raw_data, null, 2));
-                        $('#extracted-data').text(JSON.stringify(response.data.extracted_data, null, 2));
-                        $('#request-details').text(JSON.stringify(response.data.request_details, null, 2));
-                        $('#debug-test-results').show();
+                        $('#debug-raw-data').text(JSON.stringify(response.data.raw_data, null, 2));
+                        $('#debug-extracted-data').text(JSON.stringify(response.data.extracted_data, null, 2));
+                        $('#debug-request-details').text(JSON.stringify(response.data.request_details, null, 2));
+                        $('#debug-all-data').text(JSON.stringify(response.data, null, 2));
+                        $('#debug-results').show();
                     } else {
-                        alert(response.data.message || 'An error occurred');
+                        $('#debug-error').text(response.data.message).show();
                     }
                 },
                 error: function() {
-                    $('#test-debug-button').prop('disabled', false).text('Test Debug');
-                    alert('An error occurred. Please try again.');
+                    $('#debug-loading').hide();
+                    $('#debug-error').text('An error occurred while fetching the data.').show();
                 }
             });
         });
         
-        // Toggle debug sections
-        $('.toggle-raw-data').on('click', function() {
-            $('.debug-section.raw-data').toggle();
-        });
-        
-        $('.toggle-extracted-data').on('click', function() {
-            $('.debug-section.extracted-data').toggle();
-        });
-        
-        $('.toggle-request-details').on('click', function() {
-            $('.debug-section.request-details').toggle();
-        });
-        
-        // Copy all debug data
-        $('.copy-all-debug').on('click', function() {
-            var allData = {
-                raw_data: JSON.parse($('#raw-api-data').text()),
-                extracted_data: JSON.parse($('#extracted-data').text()),
-                request_details: JSON.parse($('#request-details').text())
-            };
+        // Copy to clipboard functionality
+        $('.copy-debug-data').on('click', function() {
+            var section = $(this).data('section');
+            var content = '';
             
-            var textArea = document.createElement('textarea');
-            textArea.value = JSON.stringify(allData, null, 2);
-            document.body.appendChild(textArea);
-            textArea.select();
+            switch(section) {
+                case 'raw-data':
+                    content = $('#debug-raw-data').text();
+                    break;
+                case 'extracted-data':
+                    content = $('#debug-extracted-data').text();
+                    break;
+                case 'request-details':
+                    content = $('#debug-request-details').text();
+                    break;
+                case 'all-data':
+                    content = $('#debug-all-data').text();
+                    break;
+            }
+            
+            var $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(content).select();
             document.execCommand('copy');
-            document.body.removeChild(textArea);
+            $temp.remove();
             
-            $('.copy-success').fadeIn().delay(2000).fadeOut();
+            var originalText = $(this).text();
+            $(this).text('Copied!');
+            
+            setTimeout(function() {
+                $('.copy-debug-data[data-section="' + section + '"]').text(originalText);
+            }, 2000);
+        });
+        
+        // Debug log functionality
+        $('#view-log-btn').on('click', function() {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'airbnb_analyzer_view_log',
+                    nonce: '<?php echo wp_create_nonce('airbnb_analyzer_log_nonce'); ?>'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#log-content').text(response.data.content);
+                        $('#debug-log-content').show();
+                    } else {
+                        alert(response.data.message);
+                    }
+                },
+                error: function() {
+                    alert('An error occurred while fetching the log file.');
+                }
+            });
+        });
+        
+        $('#download-log-btn').on('click', function() {
+            window.location.href = ajaxurl + '?action=airbnb_analyzer_download_log&nonce=<?php echo wp_create_nonce('airbnb_analyzer_log_nonce'); ?>';
+        });
+        
+        $('#clear-log-btn').on('click', function() {
+            if (confirm('Are you sure you want to clear the debug log?')) {
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'airbnb_analyzer_clear_log',
+                        nonce: '<?php echo wp_create_nonce('airbnb_analyzer_log_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#log-size').text('0 KB');
+                            $('#debug-log-content').hide();
+                            $('#view-log-btn, #download-log-btn, #clear-log-btn').prop('disabled', true);
+                            alert('Debug log cleared successfully.');
+                        } else {
+                            alert(response.data.message);
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred while clearing the log file.');
+                    }
+                });
+            }
         });
     });
     </script>
+    
+    <style>
+    .debug-section {
+        margin-bottom: 20px;
+    }
+    
+    .debug-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .debug-header h4 {
+        margin: 0;
+    }
+    
+    .debug-log-actions {
+        margin-top: 10px;
+    }
+    
+    .debug-log-actions .button {
+        margin-right: 10px;
+    }
+    
+    #debug-loading {
+        display: flex;
+        align-items: center;
+    }
+    </style>
     <?php
 }
 
-// Handle debug log download
-add_action('admin_post_airbnb_analyzer_download_log', 'airbnb_analyzer_download_debug_log');
-
-function airbnb_analyzer_download_debug_log() {
-    // Check permissions
-    if (!current_user_can('manage_options')) {
-        wp_die('You do not have sufficient permissions to access this page.');
+/**
+ * AJAX handler for fetching debug data
+ */
+function airbnb_analyzer_debug_fetch_callback() {
+    // Check nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'airbnb_analyzer_debug_nonce')) {
+        wp_send_json_error(array('message' => 'Invalid security token. Please refresh the page and try again.'));
     }
     
-    // Verify nonce
-    if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'download_debug_log')) {
-        wp_die('Invalid nonce. Please try again.');
+    // Check if listing URL is provided
+    if (!isset($_POST['listing_url']) || empty($_POST['listing_url'])) {
+        wp_send_json_error(array('message' => 'Please provide a valid Airbnb listing URL.'));
     }
     
-    $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
-    
-    if (file_exists($log_file)) {
-        header('Content-Type: text/plain');
-        header('Content-Disposition: attachment; filename="airbnb-analyzer-debug.log"');
-        header('Content-Length: ' . filesize($log_file));
-        readfile($log_file);
-        exit;
-    } else {
-        wp_die('Debug log file does not exist.');
-    }
-}
-
-// Handle debug log clearing
-add_action('admin_post_airbnb_analyzer_clear_log', 'airbnb_analyzer_clear_debug_log');
-
-function airbnb_analyzer_clear_debug_log() {
-    // Check permissions
-    if (!current_user_can('manage_options')) {
-        wp_die('You do not have sufficient permissions to access this page.');
-    }
-    
-    // Verify nonce
-    if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'clear_debug_log')) {
-        wp_die('Invalid nonce. Please try again.');
-    }
-    
-    $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
-    
-    if (file_exists($log_file)) {
-        file_put_contents($log_file, '');
-    }
-    
-    wp_redirect(admin_url('options-general.php?page=airbnb-analyzer-settings&cleared=1'));
-    exit;
-}
-
-// Add AJAX handler for test debug
-add_action('wp_ajax_airbnb_analyzer_test_debug', 'airbnb_analyzer_test_debug');
-
-function airbnb_analyzer_test_debug() {
-    // Check permissions
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error(array('message' => 'You do not have sufficient permissions to access this feature.'));
-    }
-    
-    // Verify nonce
-    check_ajax_referer('airbnb_analyzer_test_debug', 'nonce');
-    
-    // Get listing URL
-    $listing_url = isset($_POST['listing_url']) ? sanitize_text_field($_POST['listing_url']) : '';
-    
-    if (empty($listing_url)) {
-        wp_send_json_error(array('message' => 'Please provide a valid Airbnb listing URL'));
-    }
+    $listing_url = sanitize_text_field($_POST['listing_url']);
     
     // Extract listing ID from URL
     if (preg_match('/\/rooms\/(\d+)/', $listing_url, $matches)) {
@@ -335,7 +401,7 @@ function airbnb_analyzer_test_debug() {
         // We need to make an initial request to get the actual listing ID
         $response = wp_remote_get($listing_url);
         if (is_wp_error($response)) {
-            wp_send_json_error(array('message' => 'Error fetching listing: ' . $response->get_error_message()));
+            wp_send_json_error(array('message' => 'Error fetching listing data: ' . $response->get_error_message()));
         }
         $body = wp_remote_retrieve_body($response);
         if (preg_match('/\"id\":\"StayListing:(\d+)\"/', $body, $id_matches)) {
@@ -344,7 +410,7 @@ function airbnb_analyzer_test_debug() {
             wp_send_json_error(array('message' => 'Could not extract listing ID from URL'));
         }
     } else {
-        wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format'));
+        wp_send_json_error(array('message' => 'Invalid AirBnB listing URL format'));
     }
     
     // Construct API URL
@@ -402,6 +468,83 @@ function airbnb_analyzer_test_debug() {
         'request_details' => $request_details
     ));
 }
+add_action('wp_ajax_airbnb_analyzer_debug_fetch', 'airbnb_analyzer_debug_fetch_callback');
+
+/**
+ * AJAX handler for viewing the debug log
+ */
+function airbnb_analyzer_view_log_callback() {
+    // Check nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'airbnb_analyzer_log_nonce')) {
+        wp_send_json_error(array('message' => 'Invalid security token. Please refresh the page and try again.'));
+    }
+    
+    $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
+    
+    if (!file_exists($log_file)) {
+        wp_send_json_error(array('message' => 'Debug log file does not exist.'));
+    }
+    
+    $content = file_get_contents($log_file);
+    
+    if ($content === false) {
+        wp_send_json_error(array('message' => 'Error reading debug log file.'));
+    }
+    
+    wp_send_json_success(array('content' => $content));
+}
+add_action('wp_ajax_airbnb_analyzer_view_log', 'airbnb_analyzer_view_log_callback');
+
+/**
+ * AJAX handler for downloading the debug log
+ */
+function airbnb_analyzer_download_log_callback() {
+    // Check nonce
+    if (!isset($_GET['nonce']) || !wp_verify_nonce($_GET['nonce'], 'airbnb_analyzer_log_nonce')) {
+        wp_die('Invalid security token. Please refresh the page and try again.');
+    }
+    
+    $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
+    
+    if (!file_exists($log_file)) {
+        wp_die('Debug log file does not exist.');
+    }
+    
+    // Set headers for file download
+    header('Content-Type: text/plain');
+    header('Content-Disposition: attachment; filename="airbnb-analyzer-debug.log"');
+    header('Content-Length: ' . filesize($log_file));
+    
+    // Output file contents
+    readfile($log_file);
+    exit;
+}
+add_action('wp_ajax_airbnb_analyzer_download_log', 'airbnb_analyzer_download_log_callback');
+
+/**
+ * AJAX handler for clearing the debug log
+ */
+function airbnb_analyzer_clear_log_callback() {
+    // Check nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'airbnb_analyzer_log_nonce')) {
+        wp_send_json_error(array('message' => 'Invalid security token. Please refresh the page and try again.'));
+    }
+    
+    $log_file = AIRBNB_ANALYZER_PATH . 'debug.log';
+    
+    if (!file_exists($log_file)) {
+        wp_send_json_error(array('message' => 'Debug log file does not exist.'));
+    }
+    
+    $result = file_put_contents($log_file, '');
+    
+    if ($result === false) {
+        wp_send_json_error(array('message' => 'Error clearing debug log file.'));
+    }
+    
+    wp_send_json_success(array('message' => 'Debug log cleared successfully.'));
+}
+add_action('wp_ajax_airbnb_analyzer_clear_log', 'airbnb_analyzer_clear_log_callback');
 
 /**
  * Log debug information to file
