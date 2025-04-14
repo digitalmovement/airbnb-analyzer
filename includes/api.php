@@ -36,25 +36,25 @@ function airbnb_analyzer_get_listing_data($listing_url) {
         airbnb_analyzer_debug_log("Processing listing ID: $listing_id from URL: $listing_url", 'API Request');
     }
     
-    // Construct API URL
-    $api_url = construct_airbnb_api_url($listing_id);
+    // Instead of using the GraphQL API, let's directly access the listing page and extract data
+    $direct_url = "https://www.airbnb.com/rooms/$listing_id";
     
-    // Use WordPress HTTP API to fetch listing data
     $args = array(
         'headers' => array(
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept' => 'application/json',
-            'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20' // This is a public key used by Airbnb's website
-        )
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language' => 'en-US,en;q=0.5',
+        ),
+        'timeout' => 30
     );
     
     $request_time = microtime(true);
-    $response = wp_remote_get($api_url, $args);
+    $response = wp_remote_get($direct_url, $args);
     $response_time = microtime(true) - $request_time;
     
     if (is_wp_error($response)) {
         if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("API request error: " . $response->get_error_message(), 'API Error');
+            airbnb_analyzer_debug_log("Direct page request error: " . $response->get_error_message(), 'API Error');
         }
         return $response;
     }
@@ -63,28 +63,51 @@ function airbnb_analyzer_get_listing_data($listing_url) {
     if ($status_code !== 200) {
         if (function_exists('airbnb_analyzer_debug_log')) {
             $error_body = wp_remote_retrieve_body($response);
-            airbnb_analyzer_debug_log("API HTTP error: $status_code. Response: " . substr($error_body, 0, 500), 'API Error');
-            airbnb_analyzer_debug_log("Request URL: $api_url", 'API Error');
+            airbnb_analyzer_debug_log("Direct page HTTP error: $status_code. Response: " . substr($error_body, 0, 500), 'API Error');
+            airbnb_analyzer_debug_log("Request URL: $direct_url", 'API Error');
         }
-        return new WP_Error('api_error', 'Error fetching listing data: ' . $status_code);
+        return new WP_Error('api_error', 'Error fetching listing page: ' . $status_code);
     }
     
     $body = wp_remote_retrieve_body($response);
-    $data = json_decode($body, true);
     
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("JSON parse error: " . json_last_error_msg(), 'API Error');
+    // Extract JSON data from the page
+    if (preg_match('/<script id="data-state" data-state="(.+?)"><\/script>/s', $body, $matches)) {
+        $json_data = html_entity_decode($matches[1]);
+        $data = json_decode($json_data, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            if (function_exists('airbnb_analyzer_debug_log')) {
+                airbnb_analyzer_debug_log("JSON parse error: " . json_last_error_msg(), 'API Error');
+            }
+            return new WP_Error('json_error', 'Error parsing page data: ' . json_last_error_msg());
         }
-        return new WP_Error('json_error', 'Error parsing API response: ' . json_last_error_msg());
+    } else {
+        // Try alternative method to extract data
+        if (preg_match('/"bootstrapData":({.+?}),"niobeMinimalClientData"/s', $body, $matches)) {
+            $json_data = $matches[1];
+            $data = json_decode($json_data, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                if (function_exists('airbnb_analyzer_debug_log')) {
+                    airbnb_analyzer_debug_log("JSON parse error (alternative method): " . json_last_error_msg(), 'API Error');
+                }
+                return new WP_Error('json_error', 'Error parsing page data (alternative method): ' . json_last_error_msg());
+            }
+        } else {
+            if (function_exists('airbnb_analyzer_debug_log')) {
+                airbnb_analyzer_debug_log("Could not extract JSON data from page", 'API Error');
+            }
+            return new WP_Error('parsing_error', 'Could not extract data from listing page');
+        }
     }
     
     if (function_exists('airbnb_analyzer_debug_log')) {
-        airbnb_analyzer_debug_log("API response received successfully in " . round($response_time, 2) . " seconds", 'API Success');
+        airbnb_analyzer_debug_log("Page data extracted successfully in " . round($response_time, 2) . " seconds", 'API Success');
     }
     
-    // Parse the API response
-    $listing_data = parse_airbnb_api_response($data, $listing_id);
+    // Parse the extracted data
+    $listing_data = parse_airbnb_page_data($data, $listing_id, $body);
     
     // Add debug information if enabled
     if (get_option('airbnb_analyzer_enable_debugging')) {
@@ -98,7 +121,7 @@ function airbnb_analyzer_get_listing_data($listing_url) {
         if ($debug_level === 'advanced' || $debug_level === 'full') {
             $debug_data['request_details'] = array(
                 'listing_id' => $listing_id,
-                'api_url' => $api_url,
+                'direct_url' => $direct_url,
                 'request_time' => date('Y-m-d H:i:s'),
                 'response_time_seconds' => round($response_time, 2),
                 'status_code' => $status_code,
@@ -128,57 +151,14 @@ function airbnb_analyzer_get_listing_data($listing_url) {
 }
 
 /**
- * Construct the Airbnb API URL for a listing
+ * Parse Airbnb page data to extract listing information
  * 
+ * @param array $data The extracted JSON data
  * @param string $listing_id The listing ID
- * @return string The API URL
- */
-function construct_airbnb_api_url($listing_id) {
-    // Current date for check-in (today + 30 days)
-    $check_in = date('Y-m-d', strtotime('+30 days'));
-    // Check-out (check-in + 5 days)
-    $check_out = date('Y-m-d', strtotime($check_in . ' +5 days'));
-    
-    // Construct the GraphQL API URL with proper encoding
-    $variables = array(
-        'id' => "StayListing:$listing_id",
-        'pdpSectionsRequest' => array(
-            'adults' => '1',
-            'children' => '0',
-            'infants' => '0',
-            'pets' => 0,
-            'checkIn' => $check_in,
-            'checkOut' => $check_out,
-            'layouts' => array('SIDEBAR', 'SINGLE_COLUMN')
-        )
-    );
-    
-    $extensions = array(
-        'persistedQuery' => array(
-            'version' => 1,
-            'sha256Hash' => '6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343'
-        )
-    );
-    
-    // Use the exact URL format that works with Airbnb's API
-    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
-    $url .= '?operationName=StaysPdpSections';
-    $url .= '&locale=en-US';
-    $url .= '&currency=USD';
-    $url .= '&variables=' . urlencode(json_encode($variables));
-    $url .= '&extensions=' . urlencode(json_encode($extensions));
-    
-    return $url;
-}
-
-/**
- * Parse the Airbnb API response to extract listing data
- * 
- * @param array $data The API response data
- * @param string $listing_id The listing ID
+ * @param string $html_body The full HTML body (as fallback)
  * @return array The extracted listing data
  */
-function parse_airbnb_api_response($data, $listing_id) {
+function parse_airbnb_page_data($data, $listing_id, $html_body) {
     $listing_data = array(
         'id' => $listing_id,
         'title' => '',
@@ -222,176 +202,147 @@ function parse_airbnb_api_response($data, $listing_id) {
     $parsing_steps = array();
     
     try {
-        // Extract data from the new API structure
-        if (isset($data['data']['presentation']['stayProductDetailPage'])) {
-            $parsing_steps[] = "Found stayProductDetailPage structure";
-            $pdp = $data['data']['presentation']['stayProductDetailPage'];
+        // Extract data from HTML if needed
+        if (empty($data) || !is_array($data)) {
+            $parsing_steps[] = "Falling back to HTML parsing";
             
-            // Extract metadata if available
-            if (isset($pdp['metadata'])) {
-                $parsing_steps[] = "Processing metadata";
-                $metadata = $pdp['metadata'];
-                
-                if (isset($metadata['sharingConfig'])) {
-                    $sharing = $metadata['sharingConfig'];
-                    
-                    if (isset($sharing['title'])) {
-                        $listing_data['title'] = $sharing['title'];
-                        $parsing_steps[] = "Extracted title from sharingConfig";
-                    }
-                    
-                    if (isset($sharing['propertyType'])) {
-                        $listing_data['property_type'] = $sharing['propertyType'];
-                        $parsing_steps[] = "Extracted property_type from sharingConfig";
-                    }
-                    
-                    if (isset($sharing['location'])) {
-                        $listing_data['location'] = $sharing['location'];
-                        $parsing_steps[] = "Extracted location from sharingConfig";
-                    }
-                    
-                    if (isset($sharing['personCapacity'])) {
-                        $listing_data['max_guests'] = intval($sharing['personCapacity']);
-                        $parsing_steps[] = "Extracted max_guests from sharingConfig";
-                    }
-                    
-                    if (isset($sharing['reviewCount'])) {
-                        $listing_data['review_count'] = intval($sharing['reviewCount']);
-                        $parsing_steps[] = "Extracted review_count from sharingConfig";
-                    }
-                    
-                    if (isset($sharing['starRating'])) {
-                        $listing_data['rating'] = floatval($sharing['starRating']);
-                        $parsing_steps[] = "Extracted rating from sharingConfig";
-                    }
-                }
-                
-                // Extract more details from loggingContext if available
-                if (isset($metadata['loggingContext']['eventDataLogging'])) {
-                    $parsing_steps[] = "Processing loggingContext";
-                    $event_data = $metadata['loggingContext']['eventDataLogging'];
-                    
-                    // Extract amenities
-                    if (isset($event_data['amenities']) && is_array($event_data['amenities'])) {
-                        $amenity_map = array(
-                            1 => 'TV',
-                            4 => 'Wifi',
-                            8 => 'Kitchen',
-                            9 => 'Free parking on premises',
-                            15 => 'Washer',
-                            30 => 'Hair dryer',
-                            33 => 'Dryer',
-                            51 => 'Lake access',
-                            133 => 'Dedicated workspace'
-                        );
-                        
-                        foreach ($event_data['amenities'] as $amenity_id) {
-                            if (isset($amenity_map[$amenity_id])) {
-                                $listing_data['amenities'][] = $amenity_map[$amenity_id];
-                                $parsing_steps[] = "Added amenity: " . $amenity_map[$amenity_id];
-                            }
-                        }
-                    }
-                }
+            // Extract title
+            if (preg_match('/<meta property="og:title" content="([^"]+)"/s', $html_body, $title_matches)) {
+                $listing_data['title'] = html_entity_decode($title_matches[1]);
+                $parsing_steps[] = "Extracted title from HTML meta tag";
             }
             
-            // Process sections
-            if (isset($pdp['sections']['sections']) && is_array($pdp['sections']['sections'])) {
-                $parsing_steps[] = "Processing sections";
-                $sections = $pdp['sections']['sections'];
+            // Extract description
+            if (preg_match('/<meta property="og:description" content="([^"]+)"/s', $html_body, $desc_matches)) {
+                $listing_data['description'] = html_entity_decode($desc_matches[1]);
+                $parsing_steps[] = "Extracted description from HTML meta tag";
+            }
+            
+            // Extract images
+            if (preg_match_all('/<meta property="og:image" content="([^"]+)"/s', $html_body, $img_matches)) {
+                $listing_data['photos'] = $img_matches[1];
+                $parsing_steps[] = "Extracted " . count($listing_data['photos']) . " photos from HTML meta tags";
+            }
+            
+            // Extract location
+            if (preg_match('/<meta property="og:locality" content="([^"]+)"/s', $html_body, $loc_matches)) {
+                $listing_data['location'] = html_entity_decode($loc_matches[1]);
+                $parsing_steps[] = "Extracted location from HTML meta tag";
+            }
+        } else {
+            $parsing_steps[] = "Processing JSON data from page";
+            
+            // Extract data from the JSON structure
+            // This will need to be adapted based on the actual structure of the data
+            
+            // Look for pdp_listing_detail
+            if (isset($data['pdp_listing_detail'])) {
+                $pdp_data = $data['pdp_listing_detail'];
+                $parsing_steps[] = "Found pdp_listing_detail data";
                 
-                foreach ($sections as $section) {
-                    // Extract description
-                    if ($section['sectionId'] === 'DESCRIPTION_DEFAULT' && isset($section['section']['htmlDescription']['htmlText'])) {
-                        $listing_data['description'] = $section['section']['htmlDescription']['htmlText'];
-                        $parsing_steps[] = "Extracted description from DESCRIPTION_DEFAULT section";
+                // Extract basic listing info
+                if (isset($pdp_data['listing'])) {
+                    $listing = $pdp_data['listing'];
+                    
+                    if (isset($listing['name'])) {
+                        $listing_data['title'] = $listing['name'];
+                        $parsing_steps[] = "Extracted title from listing data";
+                    }
+                    
+                    if (isset($listing['description'])) {
+                        $listing_data['description'] = $listing['description'];
+                        $parsing_steps[] = "Extracted description from listing data";
+                    }
+                    
+                    if (isset($listing['city'])) {
+                        $listing_data['location'] = $listing['city'];
+                        $parsing_steps[] = "Extracted location from listing data";
+                    }
+                    
+                    if (isset($listing['bedrooms'])) {
+                        $listing_data['bedrooms'] = intval($listing['bedrooms']);
+                        $parsing_steps[] = "Extracted bedrooms from listing data: " . $listing_data['bedrooms'];
+                    }
+                    
+                    if (isset($listing['bathrooms'])) {
+                        $listing_data['bathrooms'] = floatval($listing['bathrooms']);
+                        $parsing_steps[] = "Extracted bathrooms from listing data: " . $listing_data['bathrooms'];
+                    }
+                    
+                    if (isset($listing['beds'])) {
+                        $listing_data['beds'] = intval($listing['beds']);
+                        $parsing_steps[] = "Extracted beds from listing data: " . $listing_data['beds'];
+                    }
+                    
+                    if (isset($listing['person_capacity'])) {
+                        $listing_data['max_guests'] = intval($listing['person_capacity']);
+                        $parsing_steps[] = "Extracted max_guests from listing data: " . $listing_data['max_guests'];
+                    }
+                    
+                    if (isset($listing['property_type'])) {
+                        $listing_data['property_type'] = $listing['property_type'];
+                        $parsing_steps[] = "Extracted property_type from listing data";
                     }
                     
                     // Extract photos
-                    if ($section['sectionId'] === 'PHOTO_TOUR_SCROLLABLE_MODAL' && isset($section['section']['mediaItems'])) {
-                        foreach ($section['section']['mediaItems'] as $media) {
-                            if (isset($media['baseUrl'])) {
-                                $listing_data['photos'][] = $media['baseUrl'];
+                    if (isset($listing['photos']) && is_array($listing['photos'])) {
+                        foreach ($listing['photos'] as $photo) {
+                            if (isset($photo['large'])) {
+                                $listing_data['photos'][] = $photo['large'];
                             }
                         }
-                        $parsing_steps[] = "Extracted " . count($listing_data['photos']) . " photos from PHOTO_TOUR_SCROLLABLE_MODAL section";
+                        $parsing_steps[] = "Extracted " . count($listing_data['photos']) . " photos from listing data";
                     }
                     
-                    // Extract house rules
-                    if ($section['sectionId'] === 'POLICIES_DEFAULT' && isset($section['section']['houseRules'])) {
-                        $rules = array();
-                        foreach ($section['section']['houseRules'] as $rule) {
-                            if (isset($rule['title'])) {
-                                $rules[] = $rule['title'];
+                    // Extract amenities
+                    if (isset($listing['amenities']) && is_array($listing['amenities'])) {
+                        foreach ($listing['amenities'] as $amenity) {
+                            if (isset($amenity['name'])) {
+                                $listing_data['amenities'][] = $amenity['name'];
                             }
                         }
-                        $listing_data['house_rules'] = implode("\n", $rules);
-                        $parsing_steps[] = "Extracted house_rules from POLICIES_DEFAULT section";
+                        $parsing_steps[] = "Extracted " . count($listing_data['amenities']) . " amenities from listing data";
                     }
                     
-                    // Extract cancellation policy
-                    if ($section['sectionId'] === 'POLICIES_DEFAULT' && isset($section['section']['cancellationPolicyTitle'])) {
-                        if (isset($section['section']['seeCancellationPolicyButton']['title'])) {
-                            $policy_name = $section['section']['seeCancellationPolicyButton']['title'];
-                            $listing_data['cancellation_policy'] = $policy_name;
-                            $parsing_steps[] = "Extracted cancellation_policy from POLICIES_DEFAULT section: " . $policy_name;
-                        }
-                    }
-                    
-                    // Extract host information from HOST_PROFILE_DEFAULT
-                    if ($section['sectionId'] === 'HOST_OVERVIEW_DEFAULT' && isset($section['sectionData'])) {
-                        if (isset($section['sectionData']['title'])) {
-                            $host_title = $section['sectionData']['title'];
-                            if (preg_match('/Hosted by (.+)$/', $host_title, $matches)) {
-                                $listing_data['host_name'] = $matches[1];
-                                $parsing_steps[] = "Extracted host_name from HOST_OVERVIEW_DEFAULT section: " . $matches[1];
-                            }
+                    // Extract host info
+                    if (isset($listing['primary_host'])) {
+                        $host = $listing['primary_host'];
+                        
+                        if (isset($host['first_name'])) {
+                            $listing_data['host_name'] = $host['first_name'];
+                            $parsing_steps[] = "Extracted host_name from listing data";
                         }
                         
-                        if (isset($section['sectionData']['overviewItems'])) {
-                            foreach ($section['sectionData']['overviewItems'] as $item) {
-                                if (isset($item['title']) && strpos($item['title'], 'hosting') !== false) {
-                                    $listing_data['host_since'] = $item['title'];
-                                    $parsing_steps[] = "Extracted host_since from HOST_OVERVIEW_DEFAULT section: " . $item['title'];
-                                }
-                            }
+                        if (isset($host['is_superhost'])) {
+                            $listing_data['host_is_superhost'] = (bool)$host['is_superhost'];
+                            $parsing_steps[] = "Extracted host_is_superhost from listing data";
                         }
                     }
                     
-                    // Extract overview details (bedrooms, bathrooms, etc.)
-                    if ($section['sectionId'] === 'OVERVIEW_DEFAULT_V2' && isset($section['sectionData']['overviewItems'])) {
-                        foreach ($section['sectionData']['overviewItems'] as $item) {
-                            if (isset($item['title'])) {
-                                $title = strtolower($item['title']);
-                                
-                                if (strpos($title, 'bedroom') !== false) {
-                                    $listing_data['bedrooms'] = (int)filter_var($title, FILTER_SANITIZE_NUMBER_INT);
-                                    $parsing_steps[] = "Extracted bedrooms from OVERVIEW_DEFAULT_V2 section: " . $listing_data['bedrooms'];
-                                } else if (strpos($title, 'bath') !== false) {
-                                    $listing_data['bathrooms'] = (int)filter_var($title, FILTER_SANITIZE_NUMBER_INT);
-                                    $parsing_steps[] = "Extracted bathrooms from OVERVIEW_DEFAULT_V2 section: " . $listing_data['bathrooms'];
-                                } else if (strpos($title, 'bed') !== false && $listing_data['beds'] == 0) {
-                                    $listing_data['beds'] = (int)filter_var($title, FILTER_SANITIZE_NUMBER_INT);
-                                    $parsing_steps[] = "Extracted beds from OVERVIEW_DEFAULT_V2 section: " . $listing_data['beds'];
-                                } else if (strpos($title, 'guest') !== false && $listing_data['max_guests'] == 0) {
-                                    $listing_data['max_guests'] = (int)filter_var($title, FILTER_SANITIZE_NUMBER_INT);
-                                    $parsing_steps[] = "Extracted max_guests from OVERVIEW_DEFAULT_V2 section: " . $listing_data['max_guests'];
-                                }
-                            }
-                        }
+                    // Extract rating info
+                    if (isset($listing['star_rating'])) {
+                        $listing_data['rating'] = floatval($listing['star_rating']);
+                        $parsing_steps[] = "Extracted rating from listing data: " . $listing_data['rating'];
                     }
                     
-                    // Extract price from BOOK_IT_FLOATING_FOOTER
-                    if ($section['sectionId'] === 'BOOK_IT_FLOATING_FOOTER' && isset($section['section']['structuredDisplayPrice']['primaryLine']['price'])) {
-                        $price_info = $section['section']['structuredDisplayPrice']['primaryLine']['price'];
-                        if (isset($price_info['amount'])) {
-                            $listing_data['price'] = floatval($price_info['amount']);
-                            $parsing_steps[] = "Extracted price from BOOK_IT_FLOATING_FOOTER section: " . $price_info['amount'];
-                        }
-                        if (isset($price_info['currency'])) {
-                            $listing_data['price_currency'] = $price_info['currency'];
-                            $parsing_steps[] = "Extracted price_currency from BOOK_IT_FLOATING_FOOTER section: " . $price_info['currency'];
-                        }
+                    if (isset($listing['review_count'])) {
+                        $listing_data['review_count'] = intval($listing['review_count']);
+                        $parsing_steps[] = "Extracted review_count from listing data: " . $listing_data['review_count'];
+                    }
+                }
+                
+                // Extract price info
+                if (isset($pdp_data['pricing_quote'])) {
+                    $pricing = $pdp_data['pricing_quote'];
+                    
+                    if (isset($pricing['rate']['amount'])) {
+                        $listing_data['price'] = floatval($pricing['rate']['amount']);
+                        $parsing_steps[] = "Extracted price from pricing data: " . $listing_data['price'];
+                    }
+                    
+                    if (isset($pricing['rate']['currency'])) {
+                        $listing_data['price_currency'] = $pricing['rate']['currency'];
+                        $parsing_steps[] = "Extracted price_currency from pricing data";
                     }
                 }
             }
@@ -401,10 +352,10 @@ function parse_airbnb_api_response($data, $listing_id) {
         $listing_data['_parsing_steps'] = $parsing_steps;
         
     } catch (Exception $e) {
-        error_log('Error parsing Airbnb API response: ' . $e->getMessage());
+        error_log('Error parsing Airbnb page data: ' . $e->getMessage());
         // Return basic data if we can extract at least the title
         if (empty($listing_data['title'])) {
-            return new WP_Error('parsing_error', 'Error parsing Airbnb API response: ' . $e->getMessage());
+            return new WP_Error('parsing_error', 'Error parsing Airbnb page data: ' . $e->getMessage());
         }
     }
     
