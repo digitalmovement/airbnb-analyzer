@@ -337,4 +337,81 @@ Format your response as JSON with these fields:
         'status' => 'error',
         'message' => 'Could not parse Claude response'
     );
+}
+
+/**
+ * Analyze property reviews with Claude
+ * 
+ * @param array $listing_data The listing data
+ * @return array Analysis results
+ */
+function airbnb_analyzer_claude_analyze_reviews($listing_data) {
+    $rating = isset($listing_data['rating']) ? $listing_data['rating'] : 0;
+    $review_count = isset($listing_data['review_count']) ? $listing_data['review_count'] : 0;
+    $is_new_listing = isset($listing_data['is_new_listing']) ? $listing_data['is_new_listing'] : false;
+    $property_type = isset($listing_data['property_type']) ? $listing_data['property_type'] : 'Property';
+    
+    // Get detailed ratings if available
+    $rating_details = '';
+    if (!empty($listing_data['property_rating_details'])) {
+        $rating_details = "Detailed ratings:\n";
+        foreach ($listing_data['property_rating_details'] as $category => $score) {
+            $rating_details .= "- $category: $score\n";
+        }
+    }
+    
+    $prompt = "You are an Airbnb optimization expert. Please analyze these reviews for a $property_type listing:
+
+Overall Rating: $rating out of 5
+Number of Reviews: $review_count
+New Listing: " . ($is_new_listing ? 'Yes' : 'No') . "
+$rating_details
+
+Please analyze:
+1. Overall review quality (1-10)
+2. Review quantity sufficiency
+3. Key strengths based on ratings
+4. Areas for improvement based on ratings
+5. Specific strategies to improve ratings and get more reviews
+
+Format your response as JSON with these fields:
+- score: (number)
+- overall_feedback: (string)
+- quantity_feedback: (string)
+- strengths: (array of strings)
+- improvement_areas: (array of strings)
+- strategies: (array of strings)";
+    
+    $response = airbnb_analyzer_claude_request($prompt);
+    
+    if (is_wp_error($response)) {
+        return array(
+            'status' => 'error',
+            'message' => $response->get_error_message()
+        );
+    }
+    
+    // Extract the content from Claude's response
+    if (isset($response['content'][0]['text'])) {
+        $content = $response['content'][0]['text'];
+        // Try to parse the JSON response
+        $json_start = strpos($content, '{');
+        $json_end = strrpos($content, '}');
+        if ($json_start !== false && $json_end !== false) {
+            $json = substr($content, $json_start, $json_end - $json_start + 1);
+            $data = json_decode($json, true);
+            if ($data) {
+                return array(
+                    'status' => 'success',
+                    'data' => $data
+                );
+            }
+        }
+    }
+    
+    // Fallback if JSON parsing fails
+    return array(
+        'status' => 'error',
+        'message' => 'Could not parse Claude response'
+    );
 } 

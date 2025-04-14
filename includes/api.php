@@ -139,22 +139,23 @@ function parse_airbnb_api_response($data, $listing_id) {
         'host_response_rate' => '',
         'host_response_time' => '',
         'host_highlights' => array(),
+        'host_rating' => 0,
+        'host_review_count' => 0,
         'neighborhood_details' => '',
         'rating' => 0,
         'review_count' => 0,
+        'property_rating_details' => array(),
+        'is_new_listing' => false,
+        'property_type' => '',
         'house_rules' => '',
-        'cancellation_policy' => ''
+        'cancellation_policy' => '',
     );
     
     try {
-        // Check if we have the expected data structure
-        if (!isset($data['data']['presentation']['stayProductDetailPage']['sections']['sections'])) {
-            return new WP_Error('invalid_response', 'Unexpected API response structure');
-        }
-        
+        // Extract sections from API response
         $sections = $data['data']['presentation']['stayProductDetailPage']['sections'];
         
-        // Extract title
+        // Extract title and description
         foreach ($sections['sections'] as $section) {
             if (isset($section['sectionId']) && $section['sectionId'] === 'TITLE_DEFAULT') {
                 if (isset($section['section']['title'])) {
@@ -164,21 +165,45 @@ function parse_airbnb_api_response($data, $listing_id) {
             }
         }
         
-        // Extract description
+        // Extract property type
         foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'DESCRIPTION_DEFAULT') {
-                if (isset($section['section']['htmlDescription']['htmlText'])) {
-                    $listing_data['description'] = $section['section']['htmlDescription']['htmlText'];
-                } elseif (isset($section['section']['description'])) {
-                    $listing_data['description'] = $section['section']['description'];
-                } elseif (isset($section['section']['items'])) {
-                    $description = '';
-                    foreach ($section['section']['items'] as $item) {
-                        if (isset($item['html']['htmlText'])) {
-                            $description .= $item['html']['htmlText'] . "\n\n";
+            if (isset($section['sectionId']) && $section['sectionId'] === 'OVERVIEW_DEFAULT_V2') {
+                if (isset($section['section']['propertyType'])) {
+                    $listing_data['property_type'] = $section['section']['propertyType'];
+                }
+                
+                // Extract property reviews
+                if (isset($section['section']['reviewData'])) {
+                    $review_data = $section['section']['reviewData'];
+                    
+                    if (isset($review_data['ratingText'])) {
+                        $listing_data['rating'] = floatval($review_data['ratingText']);
+                    }
+                    
+                    if (isset($review_data['reviewCount'])) {
+                        $listing_data['review_count'] = intval($review_data['reviewCount']);
+                    }
+                    
+                    if (isset($review_data['isNewListing'])) {
+                        $listing_data['is_new_listing'] = (bool)$review_data['isNewListing'];
+                    }
+                }
+                
+                break;
+            }
+        }
+        
+        // Extract detailed ratings if available
+        foreach ($sections['sections'] as $section) {
+            if (isset($section['sectionId']) && $section['sectionId'] === 'REVIEWS_DEFAULT') {
+                if (isset($section['section']['reviewsModuleData']['reviewsData']['reviewSummary']['reviewRatingModuleData']['ratings'])) {
+                    $ratings = $section['section']['reviewsModuleData']['reviewsData']['reviewSummary']['reviewRatingModuleData']['ratings'];
+                    
+                    foreach ($ratings as $rating) {
+                        if (isset($rating['label']) && isset($rating['value'])) {
+                            $listing_data['property_rating_details'][$rating['label']] = floatval($rating['value']);
                         }
                     }
-                    $listing_data['description'] = trim($description);
                 }
                 break;
             }
@@ -203,19 +228,6 @@ function parse_airbnb_api_response($data, $listing_id) {
                         }
                     }
                 }
-            }
-        }
-        
-        // Extract ratings and reviews
-        foreach ($sections['sections'] as $section) {
-            if (isset($section['sectionId']) && $section['sectionId'] === 'REVIEWS_DEFAULT') {
-                if (isset($section['section']['overallRating'])) {
-                    $listing_data['rating'] = (float)$section['section']['overallRating'];
-                }
-                if (isset($section['section']['reviewsCount'])) {
-                    $listing_data['review_count'] = (int)$section['section']['reviewsCount'];
-                }
-                break;
             }
         }
         

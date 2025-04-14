@@ -598,6 +598,12 @@ function airbnb_analyzer_analyze_listing_with_claude($listing_data) {
             $analysis['claude_analysis']['amenities'] = $amenities_analysis['data'];
         }
         
+        // Analyze property reviews
+        $reviews_analysis = airbnb_analyzer_claude_analyze_reviews($listing_data);
+        if ($reviews_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['reviews'] = $reviews_analysis['data'];
+        }
+        
         // Add Claude analysis summary
         if (isset($analysis['claude_analysis'])) {
             $analysis['has_claude_analysis'] = true;

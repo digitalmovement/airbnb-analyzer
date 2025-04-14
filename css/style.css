@@ -360,4 +360,16 @@
 .standout-amenities li {
     margin-bottom: 5px;
     color: #008489;
+}
+
+/* Reviews analysis styles */
+.review-strengths {
+    margin-top: 10px;
+    margin-bottom: 15px;
+    padding-left: 20px;
+}
+
+.review-strengths li {
+    margin-bottom: 5px;
+    color: #28a745;
 } 

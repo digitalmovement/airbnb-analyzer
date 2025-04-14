@@ -260,6 +260,52 @@ jQuery(document).ready(function($) {
                 html += '</div>';
             }
             
+            // Reviews analysis
+            if (data.claude_analysis.reviews) {
+                html += '<div class="claude-section">';
+                html += '<h4>Reviews Analysis</h4>';
+                html += '<div class="claude-rating">Score: <span class="' + getScoreClass(data.claude_analysis.reviews.score * 10) + '">' + data.claude_analysis.reviews.score + '/10</span></div>';
+                
+                html += '<h5>Overall Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.reviews.overall_feedback + '</p>';
+                
+                html += '<h5>Review Quantity:</h5>';
+                html += '<p>' + data.claude_analysis.reviews.quantity_feedback + '</p>';
+                
+                if (data.claude_analysis.reviews.strengths && data.claude_analysis.reviews.strengths.length > 0) {
+                    html += '<h5>Key Strengths:</h5>';
+                    html += '<ul class="review-strengths">';
+                    data.claude_analysis.reviews.strengths.forEach(function(strength) {
+                        html += '<li>' + strength + '</li>';
+                    });
+                    html += '</ul>';
+                }
+                
+                if (data.claude_analysis.reviews.improvement_areas && data.claude_analysis.reviews.improvement_areas.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Areas for Improvement:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.reviews.improvement_areas.forEach(function(area) {
+                        html += '<li>' + area + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                
+                if (data.claude_analysis.reviews.strategies && data.claude_analysis.reviews.strategies.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Strategies to Improve:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.reviews.strategies.forEach(function(strategy) {
+                        html += '<li>' + strategy + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            }
+            
             html += '</div>';
         }
         
