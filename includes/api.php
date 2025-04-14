@@ -62,7 +62,9 @@ function airbnb_analyzer_get_listing_data($listing_url) {
     $status_code = wp_remote_retrieve_response_code($response);
     if ($status_code !== 200) {
         if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("API HTTP error: $status_code", 'API Error');
+            $error_body = wp_remote_retrieve_body($response);
+            airbnb_analyzer_debug_log("API HTTP error: $status_code. Response: " . substr($error_body, 0, 500), 'API Error');
+            airbnb_analyzer_debug_log("Request URL: $api_url", 'API Error');
         }
         return new WP_Error('api_error', 'Error fetching listing data: ' . $status_code);
     }
@@ -132,7 +134,12 @@ function airbnb_analyzer_get_listing_data($listing_url) {
  * @return string The API URL
  */
 function construct_airbnb_api_url($listing_id) {
-    // Construct the GraphQL query parameters
+    // Current date for check-in (today + 30 days)
+    $check_in = date('Y-m-d', strtotime('+30 days'));
+    // Check-out (check-in + 5 days)
+    $check_out = date('Y-m-d', strtotime($check_in . ' +5 days'));
+    
+    // Construct the GraphQL API URL with proper encoding
     $variables = array(
         'id' => "StayListing:$listing_id",
         'pdpSectionsRequest' => array(
@@ -140,8 +147,8 @@ function construct_airbnb_api_url($listing_id) {
             'children' => '0',
             'infants' => '0',
             'pets' => 0,
-            'checkIn' => date('Y-m-d', strtotime('+1 month')),
-            'checkOut' => date('Y-m-d', strtotime('+1 month +5 days')),
+            'checkIn' => $check_in,
+            'checkOut' => $check_out,
             'layouts' => array('SIDEBAR', 'SINGLE_COLUMN')
         )
     );
@@ -153,17 +160,15 @@ function construct_airbnb_api_url($listing_id) {
         )
     );
     
-    // Build the URL
-    $base_url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
-    $query_params = array(
-        'operationName' => 'StaysPdpSections',
-        'locale' => 'en-US',
-        'currency' => 'USD',
-        'variables' => json_encode($variables),
-        'extensions' => json_encode($extensions)
-    );
+    // Use the exact URL format that works with Airbnb's API
+    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
+    $url .= '?operationName=StaysPdpSections';
+    $url .= '&locale=en-US';
+    $url .= '&currency=USD';
+    $url .= '&variables=' . urlencode(json_encode($variables));
+    $url .= '&extensions=' . urlencode(json_encode($extensions));
     
-    return $base_url . '?' . http_build_query($query_params);
+    return $url;
 }
 
 /**
