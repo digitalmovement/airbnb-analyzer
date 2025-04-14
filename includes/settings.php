@@ -232,7 +232,7 @@ function airbnb_analyzer_settings_page() {
                 type: 'POST',
                 data: {
                     action: 'airbnb_analyzer_debug_fetch',
-                    listing_url: listingUrl,
+                    url: listingUrl,
                     nonce: '<?php echo wp_create_nonce('airbnb_analyzer_debug_nonce'); ?>'
                 },
                 success: function(response) {
@@ -385,87 +385,74 @@ function airbnb_analyzer_debug_fetch_callback() {
         wp_send_json_error(array('message' => 'Invalid security token. Please refresh the page and try again.'));
     }
     
-    // Check if listing URL is provided
-    if (!isset($_POST['listing_url']) || empty($_POST['listing_url'])) {
-        wp_send_json_error(array('message' => 'Please provide a valid Airbnb listing URL.'));
+    // Check if URL is provided
+    if (!isset($_POST['url']) || empty($_POST['url'])) {
+        wp_send_json_error(array('message' => 'Please enter a valid Airbnb listing URL.'));
     }
     
-    $listing_url = sanitize_text_field($_POST['listing_url']);
+    $url = sanitize_text_field($_POST['url']);
     
     // Extract listing ID from URL
-    if (preg_match('/\/rooms\/(\d+)/', $listing_url, $matches)) {
+    if (preg_match('/\/rooms\/(\d+)/', $url, $matches)) {
         $listing_id = $matches[1];
-    } elseif (preg_match('/\/h\/([^\/\?]+)/', $listing_url, $matches)) {
-        // Handle /h/ style URLs
-        $listing_slug = $matches[1];
-        // We need to make an initial request to get the actual listing ID
-        $response = wp_remote_get($listing_url);
-        if (is_wp_error($response)) {
-            wp_send_json_error(array('message' => 'Error fetching listing data: ' . $response->get_error_message()));
-        }
-        $body = wp_remote_retrieve_body($response);
-        if (preg_match('/\"id\":\"StayListing:(\d+)\"/', $body, $id_matches)) {
-            $listing_id = $id_matches[1];
-        } else {
-            wp_send_json_error(array('message' => 'Could not extract listing ID from URL'));
-        }
     } else {
-        wp_send_json_error(array('message' => 'Invalid AirBnB listing URL format'));
+        wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format. Please use a URL like https://www.airbnb.com/rooms/12345'));
     }
     
-    // Construct API URL
-    $api_url = construct_airbnb_api_url($listing_id);
+    // Use direct URL approach
+    $direct_url = "https://www.airbnb.com/rooms/$listing_id";
     
     // Use WordPress HTTP API to fetch listing data
     $args = array(
         'headers' => array(
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept' => 'application/json',
-            'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20' // This is a public key used by Airbnb's website
-        )
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language' => 'en-US,en;q=0.5',
+        ),
+        'timeout' => 30
     );
     
-    $request_time = microtime(true);
-    $response = wp_remote_get($api_url, $args);
-    $response_time = microtime(true) - $request_time;
+    $response = wp_remote_get($direct_url, $args);
     
     if (is_wp_error($response)) {
-        wp_send_json_error(array('message' => 'Error fetching listing data: ' . $response->get_error_message()));
+        wp_send_json_error(array('message' => 'Error fetching data: ' . $response->get_error_message()));
     }
     
     $status_code = wp_remote_retrieve_response_code($response);
     if ($status_code !== 200) {
-        wp_send_json_error(array('message' => 'Error fetching listing data: HTTP ' . $status_code));
+        wp_send_json_error(array('message' => 'Error fetching data: HTTP ' . $status_code));
     }
     
     $body = wp_remote_retrieve_body($response);
-    $data = json_decode($body, true);
     
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        wp_send_json_error(array('message' => 'Error parsing API response: ' . json_last_error_msg()));
+    // Extract JSON data from the page
+    $data = array();
+    if (preg_match('/<script id="data-state" data-state="(.+?)"><\/script>/s', $body, $matches)) {
+        $json_data = html_entity_decode($matches[1]);
+        $data = json_decode($json_data, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error(array('message' => 'Error parsing page data: ' . json_last_error_msg()));
+        }
+    } else if (preg_match('/"bootstrapData":({.+?}),"niobeMinimalClientData"/s', $body, $matches)) {
+        $json_data = $matches[1];
+        $data = json_decode($json_data, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error(array('message' => 'Error parsing page data (alternative method): ' . json_last_error_msg()));
+        }
+    } else {
+        // If we can't extract JSON, return some basic HTML data
+        $data = array(
+            'html_extract' => substr($body, 0, 10000),
+            'note' => 'Could not extract JSON data from page, showing HTML excerpt instead'
+        );
     }
     
-    // Parse the API response
-    $listing_data = parse_airbnb_api_response($data, $listing_id);
-    
-    // Prepare request details
-    $request_details = array(
-        'listing_id' => $listing_id,
-        'api_url' => $api_url,
-        'request_time' => date('Y-m-d H:i:s'),
-        'response_time_seconds' => round($response_time, 2),
-        'status_code' => $status_code,
-        'headers' => wp_remote_retrieve_headers($response)->getAll(),
-        'php_version' => PHP_VERSION,
-        'wordpress_version' => get_bloginfo('version'),
-        'plugin_version' => '1.0.0'
-    );
-    
-    // Return debug data
+    // Return the raw data for debugging
     wp_send_json_success(array(
-        'raw_data' => $data,
-        'extracted_data' => $listing_data,
-        'request_details' => $request_details
+        'direct_url' => $direct_url,
+        'data' => $data
     ));
 }
 add_action('wp_ajax_airbnb_analyzer_debug_fetch', 'airbnb_analyzer_debug_fetch_callback');
