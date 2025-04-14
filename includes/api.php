@@ -31,6 +31,11 @@ function airbnb_analyzer_get_listing_data($listing_url) {
         return new WP_Error('invalid_url', 'Invalid AirBnB listing URL format');
     }
     
+    // Log debug info
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Processing listing ID: $listing_id from URL: $listing_url", 'API Request');
+    }
+    
     // Construct API URL
     $api_url = construct_airbnb_api_url($listing_id);
     
@@ -43,14 +48,22 @@ function airbnb_analyzer_get_listing_data($listing_url) {
         )
     );
     
+    $request_time = microtime(true);
     $response = wp_remote_get($api_url, $args);
+    $response_time = microtime(true) - $request_time;
     
     if (is_wp_error($response)) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("API request error: " . $response->get_error_message(), 'API Error');
+        }
         return $response;
     }
     
     $status_code = wp_remote_retrieve_response_code($response);
     if ($status_code !== 200) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("API HTTP error: $status_code", 'API Error');
+        }
         return new WP_Error('api_error', 'Error fetching listing data: ' . $status_code);
     }
     
@@ -58,18 +71,55 @@ function airbnb_analyzer_get_listing_data($listing_url) {
     $data = json_decode($body, true);
     
     if (json_last_error() !== JSON_ERROR_NONE) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("JSON parse error: " . json_last_error_msg(), 'API Error');
+        }
         return new WP_Error('json_error', 'Error parsing API response: ' . json_last_error_msg());
+    }
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("API response received successfully in " . round($response_time, 2) . " seconds", 'API Success');
     }
     
     // Parse the API response
     $listing_data = parse_airbnb_api_response($data, $listing_id);
     
-    // Add raw data for debugging if enabled
+    // Add debug information if enabled
     if (get_option('airbnb_analyzer_enable_debugging')) {
-        $listing_data['_debug'] = array(
+        $debug_level = get_option('airbnb_analyzer_debug_level', 'basic');
+        
+        $debug_data = array(
             'raw_data' => $data,
-            'api_url' => $api_url
+            'extracted_data' => $listing_data
         );
+        
+        if ($debug_level === 'advanced' || $debug_level === 'full') {
+            $debug_data['request_details'] = array(
+                'listing_id' => $listing_id,
+                'api_url' => $api_url,
+                'request_time' => date('Y-m-d H:i:s'),
+                'response_time_seconds' => round($response_time, 2),
+                'status_code' => $status_code,
+                'headers' => wp_remote_retrieve_headers($response)->getAll()
+            );
+        }
+        
+        if ($debug_level === 'full') {
+            $debug_data['php_info'] = array(
+                'php_version' => PHP_VERSION,
+                'wordpress_version' => get_bloginfo('version'),
+                'memory_usage' => size_format(memory_get_usage(true)),
+                'max_memory' => ini_get('memory_limit')
+            );
+            
+            // Add parsing steps if available
+            if (isset($listing_data['_parsing_steps'])) {
+                $debug_data['parsing_steps'] = $listing_data['_parsing_steps'];
+                unset($listing_data['_parsing_steps']);
+            }
+        }
+        
+        $listing_data['_debug'] = $debug_data;
     }
     
     return $listing_data;
