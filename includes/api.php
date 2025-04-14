@@ -172,9 +172,41 @@ function parse_airbnb_api_response($data, $listing_id) {
             }
         }
         
-        // Extract cancellation policy from bookingPrefetchData
-        if (isset($data['data']['presentation']['stayProductDetailPage']['bookingPrefetchData'])) {
-            $booking_data = $data['data']['presentation']['stayProductDetailPage']['bookingPrefetchData'];
+        // Extract guest favorite status from the correct location in the JSON
+        if (isset($data['data']['presentation']['stayProductDetailPage']['sbuiData']['sectionConfiguration']['root']['sections'])) {
+            $sections = $data['data']['presentation']['stayProductDetailPage']['sbuiData']['sectionConfiguration']['root']['sections'];
+            
+            foreach ($sections as $section) {
+                if (isset($section['sectionId']) && $section['sectionId'] === 'OVERVIEW_DEFAULT_V2') {
+                    if (isset($section['loggingData']['eventData']['pdpContext']['isGuestFavorite'])) {
+                        $listing_data['is_guest_favorite'] = ($section['loggingData']['eventData']['pdpContext']['isGuestFavorite'] === 'true');
+                    }
+                    
+                    // Also extract review data from the same section
+                    if (isset($section['sectionData']['reviewData'])) {
+                        $review_data = $section['sectionData']['reviewData'];
+                        
+                        if (isset($review_data['ratingText'])) {
+                            $listing_data['rating'] = floatval($review_data['ratingText']);
+                        }
+                        
+                        if (isset($review_data['reviewCount'])) {
+                            $listing_data['review_count'] = intval($review_data['reviewCount']);
+                        }
+                        
+                        if (isset($review_data['isNewListing'])) {
+                            $listing_data['is_new_listing'] = (bool)$review_data['isNewListing'];
+                        }
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        // Extract cancellation policy from the correct location
+        if (isset($data['data']['presentation']['stayProductDetailPage']['metadata']['bookingPrefetchData'])) {
+            $booking_data = $data['data']['presentation']['stayProductDetailPage']['metadata']['bookingPrefetchData'];
             
             // Extract instant book status
             if (isset($booking_data['canInstantBook'])) {
