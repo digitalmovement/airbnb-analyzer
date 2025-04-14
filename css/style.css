@@ -372,4 +372,33 @@
 .review-strengths li {
     margin-bottom: 5px;
     color: #28a745;
+}
+
+/* Cancellation policy analysis styles */
+.cancellation-policy-details {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.cancellation-policy-name {
+    font-weight: 600;
+    color: #484848;
+    margin-bottom: 5px;
+}
+
+.cancellation-policy-description {
+    font-size: 14px;
+    color: #717171;
+}
+
+.instant-book-badge {
+    display: inline-block;
+    background: #008489;
+    color: white;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-top: 8px;
 } 

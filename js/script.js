@@ -272,6 +272,11 @@ jQuery(document).ready(function($) {
                 html += '<h5>Review Quantity:</h5>';
                 html += '<p>' + data.claude_analysis.reviews.quantity_feedback + '</p>';
                 
+                if (data.claude_analysis.reviews.favorite_status_feedback) {
+                    html += '<h5>Guest Favorite Status:</h5>';
+                    html += '<p>' + data.claude_analysis.reviews.favorite_status_feedback + '</p>';
+                }
+                
                 if (data.claude_analysis.reviews.strengths && data.claude_analysis.reviews.strengths.length > 0) {
                     html += '<h5>Key Strengths:</h5>';
                     html += '<ul class="review-strengths">';
@@ -298,6 +303,40 @@ jQuery(document).ready(function($) {
                     html += '<ul>';
                     data.claude_analysis.reviews.strategies.forEach(function(strategy) {
                         html += '<li>' + strategy + '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            }
+            
+            // Cancellation Policy analysis
+            if (data.claude_analysis.cancellation) {
+                html += '<div class="claude-section">';
+                html += '<h4>Cancellation Policy Analysis</h4>';
+                html += '<div class="claude-rating">Score: <span class="' + getScoreClass(data.claude_analysis.cancellation.score * 10) + '">' + data.claude_analysis.cancellation.score + '/10</span></div>';
+                
+                html += '<h5>Overall Feedback:</h5>';
+                html += '<p>' + data.claude_analysis.cancellation.overall_feedback + '</p>';
+                
+                html += '<h5>Impact on Booking Conversion:</h5>';
+                html += '<p>' + data.claude_analysis.cancellation.conversion_impact + '</p>';
+                
+                html += '<h5>Protection vs. Flexibility Balance:</h5>';
+                html += '<p>' + data.claude_analysis.cancellation.protection_balance + '</p>';
+                
+                if (data.claude_analysis.cancellation.instant_book_feedback) {
+                    html += '<h5>Instant Book Impact:</h5>';
+                    html += '<p>' + data.claude_analysis.cancellation.instant_book_feedback + '</p>';
+                }
+                
+                if (data.claude_analysis.cancellation.recommendations && data.claude_analysis.cancellation.recommendations.length > 0) {
+                    html += '<div class="claude-suggestions">';
+                    html += '<h5>Recommendations:</h5>';
+                    html += '<ul>';
+                    data.claude_analysis.cancellation.recommendations.forEach(function(recommendation) {
+                        html += '<li>' + recommendation + '</li>';
                     });
                     html += '</ul>';
                     html += '</div>';

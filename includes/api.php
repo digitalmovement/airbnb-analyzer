@@ -146,9 +146,16 @@ function parse_airbnb_api_response($data, $listing_id) {
         'review_count' => 0,
         'property_rating_details' => array(),
         'is_new_listing' => false,
+        'is_guest_favorite' => false,
         'property_type' => '',
         'house_rules' => '',
         'cancellation_policy' => '',
+        'cancellation_policy_details' => array(
+            'name' => '',
+            'description' => '',
+            'strictness' => 0, // 1-5 scale, 5 being most strict
+            'can_instant_book' => false
+        ),
     );
     
     try {
@@ -165,15 +172,82 @@ function parse_airbnb_api_response($data, $listing_id) {
             }
         }
         
-        // Extract property type
+        // Extract cancellation policy from bookingPrefetchData
+        if (isset($data['data']['presentation']['stayProductDetailPage']['bookingPrefetchData'])) {
+            $booking_data = $data['data']['presentation']['stayProductDetailPage']['bookingPrefetchData'];
+            
+            // Extract instant book status
+            if (isset($booking_data['canInstantBook'])) {
+                $listing_data['cancellation_policy_details']['can_instant_book'] = (bool)$booking_data['canInstantBook'];
+            }
+            
+            // Extract cancellation policy details
+            if (isset($booking_data['cancellationPolicies']) && is_array($booking_data['cancellationPolicies']) && !empty($booking_data['cancellationPolicies'])) {
+                $policy = $booking_data['cancellationPolicies'][0];
+                
+                if (isset($policy['localized_cancellation_policy_name'])) {
+                    $listing_data['cancellation_policy_details']['name'] = $policy['localized_cancellation_policy_name'];
+                    $listing_data['cancellation_policy'] = $policy['localized_cancellation_policy_name'];
+                }
+                
+                if (isset($policy['book_it_module_tooltip'])) {
+                    $listing_data['cancellation_policy_details']['description'] = $policy['book_it_module_tooltip'];
+                }
+                
+                // Determine strictness level based on policy name
+                if (!empty($listing_data['cancellation_policy_details']['name'])) {
+                    $policy_name = strtolower($listing_data['cancellation_policy_details']['name']);
+                    
+                    if (strpos($policy_name, 'flexible') !== false) {
+                        $listing_data['cancellation_policy_details']['strictness'] = 1;
+                    } elseif (strpos($policy_name, 'moderate') !== false) {
+                        $listing_data['cancellation_policy_details']['strictness'] = 2;
+                    } elseif (strpos($policy_name, 'strict') !== false) {
+                        if (strpos($policy_name, 'super strict') !== false) {
+                            $listing_data['cancellation_policy_details']['strictness'] = 5;
+                        } else {
+                            $listing_data['cancellation_policy_details']['strictness'] = 4;
+                        }
+                    } elseif (strpos($policy_name, 'long term') !== false) {
+                        $listing_data['cancellation_policy_details']['strictness'] = 3;
+                    } else {
+                        $listing_data['cancellation_policy_details']['strictness'] = 3; // Default to moderate
+                    }
+                }
+            }
+        }
+        
+        // Extract property type and review data from OVERVIEW_DEFAULT_V2
         foreach ($sections['sections'] as $section) {
             if (isset($section['sectionId']) && $section['sectionId'] === 'OVERVIEW_DEFAULT_V2') {
+                // Extract property type
                 if (isset($section['section']['propertyType'])) {
                     $listing_data['property_type'] = $section['section']['propertyType'];
                 }
                 
-                // Extract property reviews
-                if (isset($section['section']['reviewData'])) {
+                // Check for new SBUI data structure
+                if (isset($section['sbuiData']['sectionData']['reviewData'])) {
+                    $review_data = $section['sbuiData']['sectionData']['reviewData'];
+                    
+                    if (isset($review_data['ratingText'])) {
+                        $listing_data['rating'] = floatval($review_data['ratingText']);
+                    }
+                    
+                    if (isset($review_data['reviewCount'])) {
+                        $listing_data['review_count'] = intval($review_data['reviewCount']);
+                    }
+                    
+                    if (isset($review_data['isNewListing'])) {
+                        $listing_data['is_new_listing'] = (bool)$review_data['isNewListing'];
+                    }
+                    
+                    // Extract guest favorite status
+                    if (isset($review_data['loggingEventData']['eventData']['pdpContext']['isGuestFavorite'])) {
+                        $listing_data['is_guest_favorite'] = ($review_data['loggingEventData']['eventData']['pdpContext']['isGuestFavorite'] === 'true');
+                    }
+                }
+                // Fallback to old structure
+                else if (isset($section['section']['reviewData'])) {
                     $review_data = $section['section']['reviewData'];
                     
                     if (isset($review_data['ratingText'])) {
@@ -186,6 +260,11 @@ function parse_airbnb_api_response($data, $listing_id) {
                     
                     if (isset($review_data['isNewListing'])) {
                         $listing_data['is_new_listing'] = (bool)$review_data['isNewListing'];
+                    }
+                    
+                    // Extract guest favorite status
+                    if (isset($review_data['loggingEventData']['eventData']['pdpContext']['isGuestFavorite'])) {
+                        $listing_data['is_guest_favorite'] = ($review_data['loggingEventData']['eventData']['pdpContext']['isGuestFavorite'] === 'true');
                     }
                 }
                 

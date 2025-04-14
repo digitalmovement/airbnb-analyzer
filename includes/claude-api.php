@@ -349,6 +349,7 @@ function airbnb_analyzer_claude_analyze_reviews($listing_data) {
     $rating = isset($listing_data['rating']) ? $listing_data['rating'] : 0;
     $review_count = isset($listing_data['review_count']) ? $listing_data['review_count'] : 0;
     $is_new_listing = isset($listing_data['is_new_listing']) ? $listing_data['is_new_listing'] : false;
+    $is_guest_favorite = isset($listing_data['is_guest_favorite']) ? $listing_data['is_guest_favorite'] : false;
     $property_type = isset($listing_data['property_type']) ? $listing_data['property_type'] : 'Property';
     
     // Get detailed ratings if available
@@ -365,6 +366,7 @@ function airbnb_analyzer_claude_analyze_reviews($listing_data) {
 Overall Rating: $rating out of 5
 Number of Reviews: $review_count
 New Listing: " . ($is_new_listing ? 'Yes' : 'No') . "
+Guest Favorite Status: " . ($is_guest_favorite ? 'Yes (this is a significant achievement)' : 'No') . "
 $rating_details
 
 Please analyze:
@@ -372,7 +374,8 @@ Please analyze:
 2. Review quantity sufficiency
 3. Key strengths based on ratings
 4. Areas for improvement based on ratings
-5. Specific strategies to improve ratings and get more reviews
+5. Guest favorite status impact (if applicable)
+6. Specific strategies to improve ratings and get more reviews
 
 Format your response as JSON with these fields:
 - score: (number)
@@ -380,7 +383,78 @@ Format your response as JSON with these fields:
 - quantity_feedback: (string)
 - strengths: (array of strings)
 - improvement_areas: (array of strings)
+- favorite_status_feedback: (string)
 - strategies: (array of strings)";
+    
+    $response = airbnb_analyzer_claude_request($prompt);
+    
+    if (is_wp_error($response)) {
+        return array(
+            'status' => 'error',
+            'message' => $response->get_error_message()
+        );
+    }
+    
+    // Extract the content from Claude's response
+    if (isset($response['content'][0]['text'])) {
+        $content = $response['content'][0]['text'];
+        // Try to parse the JSON response
+        $json_start = strpos($content, '{');
+        $json_end = strrpos($content, '}');
+        if ($json_start !== false && $json_end !== false) {
+            $json = substr($content, $json_start, $json_end - $json_start + 1);
+            $data = json_decode($json, true);
+            if ($data) {
+                return array(
+                    'status' => 'success',
+                    'data' => $data
+                );
+            }
+        }
+    }
+    
+    // Fallback if JSON parsing fails
+    return array(
+        'status' => 'error',
+        'message' => 'Could not parse Claude response'
+    );
+}
+
+/**
+ * Analyze cancellation policy with Claude
+ * 
+ * @param array $listing_data The listing data
+ * @return array Analysis results
+ */
+function airbnb_analyzer_claude_analyze_cancellation($listing_data) {
+    $policy_name = isset($listing_data['cancellation_policy_details']['name']) ? $listing_data['cancellation_policy_details']['name'] : 'Unknown';
+    $policy_description = isset($listing_data['cancellation_policy_details']['description']) ? $listing_data['cancellation_policy_details']['description'] : '';
+    $strictness = isset($listing_data['cancellation_policy_details']['strictness']) ? $listing_data['cancellation_policy_details']['strictness'] : 3;
+    $can_instant_book = isset($listing_data['cancellation_policy_details']['can_instant_book']) ? $listing_data['cancellation_policy_details']['can_instant_book'] : false;
+    $property_type = isset($listing_data['property_type']) ? $listing_data['property_type'] : 'Property';
+    $price = isset($listing_data['price']) ? $listing_data['price'] : 0;
+    
+    $prompt = "You are an Airbnb optimization expert. Please analyze this cancellation policy for a $property_type listing priced at \$$price per night:
+
+Policy Name: $policy_name
+Policy Description: $policy_description
+Strictness Level: $strictness (on a scale of 1-5, where 5 is most strict)
+Instant Book Enabled: " . ($can_instant_book ? 'Yes' : 'No') . "
+
+Please analyze:
+1. Overall policy appropriateness for this property type and price point (1-10)
+2. Impact on booking conversion rates
+3. Balance between host protection and guest flexibility
+4. Instant Book impact on bookings
+5. Specific recommendations for optimization
+
+Format your response as JSON with these fields:
+- score: (number)
+- overall_feedback: (string)
+- conversion_impact: (string)
+- protection_balance: (string)
+- instant_book_feedback: (string)
+- recommendations: (array of strings)";
     
     $response = airbnb_analyzer_claude_request($prompt);
     

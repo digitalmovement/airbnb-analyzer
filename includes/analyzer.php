@@ -330,22 +330,32 @@ function airbnb_analyzer_analyze_listing($listing_data) {
     $score += $photos_analysis['score'];
     
     // Analyze amenities
-    $amenities_analysis = airbnb_analyzer_check_amenities($listing_data['amenities']);
+    $amenities_analysis = analyze_amenities($listing_data['amenities']);
     $analysis['recommendations'][] = $amenities_analysis;
     $score += $amenities_analysis['score'];
+    
+    // Analyze reviews
+    $reviews_analysis = analyze_reviews($listing_data['rating'], $listing_data['review_count'], $listing_data['is_guest_favorite']);
+    $analysis['recommendations'][] = $reviews_analysis;
+    $score += $reviews_analysis['score'];
+    
+    // Analyze cancellation policy
+    $cancellation_analysis = analyze_cancellation_policy($listing_data['cancellation_policy_details'], $listing_data['property_type']);
+    $analysis['recommendations'][] = $cancellation_analysis;
+    $score += $cancellation_analysis['score'];
     
     // Calculate final score
     $analysis['score'] = min(100, $score);
     
-    // Generate summary
-    if ($analysis['score'] >= 90) {
-        $analysis['summary'] = 'Excellent! Your listing is very well optimized.';
-    } elseif ($analysis['score'] >= 70) {
-        $analysis['summary'] = 'Good job! Your listing is well optimized but has room for improvement.';
-    } elseif ($analysis['score'] >= 50) {
-        $analysis['summary'] = 'Your listing needs some work to reach its full potential.';
+    // Generate summary based on score
+    if ($analysis['score'] >= 80) {
+        $analysis['summary'] = 'Excellent! Your listing is well-optimized for Airbnb.';
+    } elseif ($analysis['score'] >= 60) {
+        $analysis['summary'] = 'Good listing with some room for improvement.';
+    } elseif ($analysis['score'] >= 40) {
+        $analysis['summary'] = 'Average listing. Follow our recommendations to improve your visibility and bookings.';
     } else {
-        $analysis['summary'] = 'Your listing needs significant improvements to attract more guests.';
+        $analysis['summary'] = 'Your listing needs significant improvements to perform well on Airbnb.';
     }
     
     return $analysis;
@@ -604,6 +614,12 @@ function airbnb_analyzer_analyze_listing_with_claude($listing_data) {
             $analysis['claude_analysis']['reviews'] = $reviews_analysis['data'];
         }
         
+        // Analyze cancellation policy
+        $cancellation_analysis = airbnb_analyzer_claude_analyze_cancellation($listing_data);
+        if ($cancellation_analysis['status'] === 'success') {
+            $analysis['claude_analysis']['cancellation'] = $cancellation_analysis['data'];
+        }
+        
         // Add Claude analysis summary
         if (isset($analysis['claude_analysis'])) {
             $analysis['has_claude_analysis'] = true;
@@ -756,6 +772,185 @@ function analyze_amenities($amenities) {
     // Add general recommendation for amenity count if needed
     if ($amenity_count < 15) {
         $result['recommendations'][] = 'Try to offer at least 15-20 amenities to make your listing more attractive to potential guests.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze reviews
+ * 
+ * @param float $rating The listing rating
+ * @param int $review_count The number of reviews
+ * @param bool $is_guest_favorite Whether the listing is a guest favorite
+ * @return array Analysis results
+ */
+function analyze_reviews($rating, $review_count, $is_guest_favorite = false) {
+    $result = array(
+        'category' => 'Reviews',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array()
+    );
+    
+    // Calculate base score based on rating and review count
+    $rating_score = min(5, $rating) * 1.2; // Max 6 points for rating
+    $review_count_score = min(4, ($review_count / 25) * 4); // Max 4 points for review count
+    
+    // Add bonus for guest favorite status
+    $favorite_bonus = $is_guest_favorite ? 1 : 0; // 1 bonus point for guest favorite
+    
+    $result['score'] = round($rating_score + $review_count_score + $favorite_bonus);
+    
+    // Set status based on score
+    if ($result['score'] >= 8) {
+        $result['status'] = 'excellent';
+    } elseif ($result['score'] >= 6) {
+        $result['status'] = 'good';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'average';
+    } else {
+        $result['status'] = 'poor';
+    }
+    
+    // Set message based on score and guest favorite status
+    if ($is_guest_favorite) {
+        $result['message'] = 'Congratulations! Your listing is a Guest Favorite, which significantly boosts your visibility and appeal.';
+    } else {
+        if ($result['score'] >= 8) {
+            $result['message'] = 'Excellent reviews! Your listing has a great rating and a solid number of reviews.';
+        } elseif ($result['score'] >= 6) {
+            $result['message'] = 'Good reviews overall, but there\'s room for improvement to reach "Guest Favorite" status.';
+        } elseif ($result['score'] >= 4) {
+            $result['message'] = 'Your reviews are average. Focus on improving your rating and getting more reviews.';
+        } else {
+            $result['message'] = 'Your reviews need significant improvement to attract more guests.';
+        }
+    }
+    
+    // Add recommendations
+    if ($rating < 4.5) {
+        $result['recommendations'][] = 'Work on improving your rating by addressing common concerns in reviews.';
+    }
+    
+    if ($review_count < 10) {
+        $result['recommendations'][] = 'Encourage more guests to leave reviews by providing exceptional experiences and sending follow-up messages.';
+    }
+    
+    if (!$is_guest_favorite) {
+        $result['recommendations'][] = 'Aim for "Guest Favorite" status by consistently delivering exceptional experiences and maintaining a high rating.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze cancellation policy
+ * 
+ * @param array $policy_details The cancellation policy details
+ * @param string $property_type The property type
+ * @return array Analysis results
+ */
+function analyze_cancellation_policy($policy_details, $property_type = '') {
+    $result = array(
+        'category' => 'Cancellation Policy',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'average',
+        'message' => '',
+        'recommendations' => array()
+    );
+    
+    $policy_name = isset($policy_details['name']) ? $policy_details['name'] : '';
+    $strictness = isset($policy_details['strictness']) ? $policy_details['strictness'] : 3;
+    $can_instant_book = isset($policy_details['can_instant_book']) ? $policy_details['can_instant_book'] : false;
+    
+    // Calculate base score based on policy strictness and property type
+    // For most properties, a moderate policy (3) is optimal
+    // For luxury or high-end properties, stricter policies (4-5) may be appropriate
+    $is_luxury = false;
+    if (!empty($property_type)) {
+        $luxury_keywords = array('luxury', 'villa', 'mansion', 'penthouse', 'estate');
+        foreach ($luxury_keywords as $keyword) {
+            if (stripos($property_type, $keyword) !== false) {
+                $is_luxury = true;
+                break;
+            }
+        }
+    }
+    
+    if ($is_luxury) {
+        // For luxury properties, stricter policies are more acceptable
+        if ($strictness <= 2) {
+            $policy_score = 6; // Too lenient for luxury
+        } elseif ($strictness == 3) {
+            $policy_score = 8; // Good balance
+        } elseif ($strictness == 4) {
+            $policy_score = 9; // Very good for luxury
+        } else {
+            $policy_score = 7; // Super strict might be too much
+        }
+    } else {
+        // For standard properties, more flexible policies are better
+        if ($strictness <= 2) {
+            $policy_score = 9; // Very flexible, attractive to guests
+        } elseif ($strictness == 3) {
+            $policy_score = 8; // Good balance
+        } elseif ($strictness == 4) {
+            $policy_score = 6; // Might be too strict
+        } else {
+            $policy_score = 4; // Super strict, may deter bookings
+        }
+    }
+    
+    // Add bonus for instant book
+    $instant_book_bonus = $can_instant_book ? 1 : 0;
+    
+    $result['score'] = min(10, $policy_score + $instant_book_bonus);
+    
+    // Set status based on score
+    if ($result['score'] >= 8) {
+        $result['status'] = 'excellent';
+    } elseif ($result['score'] >= 6) {
+        $result['status'] = 'good';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'average';
+    } else {
+        $result['status'] = 'poor';
+    }
+    
+    // Set message based on score and policy
+    if (!empty($policy_name)) {
+        if ($result['score'] >= 8) {
+            $result['message'] = "Your '{$policy_name}' cancellation policy is well-balanced and appropriate for your property type.";
+        } elseif ($result['score'] >= 6) {
+            $result['message'] = "Your '{$policy_name}' cancellation policy is good, but could be optimized for better booking conversion.";
+        } elseif ($result['score'] >= 4) {
+            $result['message'] = "Your '{$policy_name}' cancellation policy may be too strict for your property type, potentially deterring bookings.";
+        } else {
+            $result['message'] = "Your '{$policy_name}' cancellation policy is very strict and likely reducing your booking rate significantly.";
+        }
+    } else {
+        $result['message'] = "No cancellation policy information found. Setting a clear policy is important for guest expectations.";
+    }
+    
+    // Add recommendations
+    if ($is_luxury) {
+        if ($strictness <= 2) {
+            $result['recommendations'][] = "Consider a stricter cancellation policy for your luxury property to protect against last-minute cancellations.";
+        } elseif ($strictness >= 5) {
+            $result['recommendations'][] = "Even for luxury properties, a 'Super Strict' policy may deter bookings. Consider a standard 'Strict' policy instead.";
+        }
+    } else {
+        if ($strictness >= 4) {
+            $result['recommendations'][] = "Your strict cancellation policy may be deterring potential guests. Consider a more moderate policy to increase bookings.";
+        }
+    }
+    
+    if (!$can_instant_book) {
+        $result['recommendations'][] = "Enabling Instant Book can increase your booking rate by 12-15% according to Airbnb data.";
     }
     
     return $result;
