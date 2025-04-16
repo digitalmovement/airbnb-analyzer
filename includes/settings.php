@@ -401,15 +401,21 @@ function airbnb_analyzer_debug_fetch_callback() {
         wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format. Please use a URL like https://www.airbnb.com/rooms/12345'));
     }
     
-    // Use the Airbnb API directly
-    $api_url = construct_airbnb_api_url($listing_id);
+    // Use a simpler API endpoint
+    $api_url = "https://www.airbnb.com/api/v2/pdp_listing_details/{$listing_id}?_format=for_rooms_show&key=d306zoyjsyarp7ifhu67rjxn52tv0t20";
     
     // Use WordPress HTTP API to fetch listing data
     $args = array(
         'headers' => array(
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept' => 'application/json',
-            'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20'
+            'Accept-Language' => 'en-US,en;q=0.9',
+            'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20',
+            'X-Airbnb-OAuth-Token' => '',
+            'X-CSRF-Token' => '',
+            'X-CSRF-Without-Token' => '1',
+            'Origin' => 'https://www.airbnb.com',
+            'Referer' => 'https://www.airbnb.com/'
         ),
         'timeout' => 30,
         'sslverify' => false

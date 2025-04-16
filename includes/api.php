@@ -344,20 +344,31 @@ function construct_airbnb_api_url($listing_id) {
     // Check-out (check-in + 5 days)
     $check_out = date('Y-m-d', strtotime($check_in . ' +5 days'));
     
-    // Construct the GraphQL API URL with proper encoding
+    // Construct the variables parameter
     $variables = array(
-        'id' => "StayListing:$listing_id",
-        'pdpSectionsRequest' => array(
-            'adults' => '1',
-            'children' => '0',
-            'infants' => '0',
-            'pets' => 0,
-            'checkIn' => $check_in,
-            'checkOut' => $check_out,
-            'layouts' => array('SIDEBAR', 'SINGLE_COLUMN')
+        'request' => array(
+            'id' => "StayListing:$listing_id",
+            'pdpSectionsRequest' => array(
+                'adults' => 1,
+                'bypassTargetings' => true,
+                'categoryTag' => 'Tag:8678",
+                'children' => 0,
+                'disasterId' => null,
+                'infants' => 0,
+                'pets' => 0,
+                'checkIn' => $check_in,
+                'checkOut' => $check_out,
+                'layouts' => array('SIDEBAR', 'SINGLE_COLUMN'),
+                'pdpTypeOverride' => null,
+                'preview' => false,
+                'translateUgc' => null,
+                'treatmentFlags' => array()
+            ),
+            'layoutSections' => array('SIDEBAR', 'SINGLE_COLUMN')
         )
     );
     
+    // Construct the extensions parameter
     $extensions = array(
         'persistedQuery' => array(
             'version' => 1,
@@ -366,7 +377,7 @@ function construct_airbnb_api_url($listing_id) {
     );
     
     // Use the exact URL format that works with Airbnb's API
-    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections/6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343';
+    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections';
     $url .= '?operationName=StaysPdpSections';
     $url .= '&locale=en-US';
     $url .= '&currency=USD';
