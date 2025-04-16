@@ -347,7 +347,7 @@ function construct_airbnb_api_url($listing_id) {
     // Construct the variables parameter
     $variables = array(
         'request' => array(
-            'id' => "StayListing:$listing_id",
+            'id' => $listing_id,
             'pdpSectionsRequest' => array(
                 'adults' => 1,
                 'bypassTargetings' => true,

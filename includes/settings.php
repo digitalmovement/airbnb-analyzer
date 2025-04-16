@@ -425,7 +425,43 @@ function airbnb_analyzer_debug_fetch_callback() {
                 'Referer' => 'https://www.airbnb.com/'
             )
         ),
-        // Endpoint 3: Direct listing page
+        // Endpoint 3: New API endpoint
+        array(
+            'url' => "https://www.airbnb.com/api/v3/PdpPlatformSections?operationName=PdpPlatformSections&locale=en&currency=USD",
+            'headers' => array(
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept' => 'application/json',
+                'Accept-Language' => 'en-US,en;q=0.9',
+                'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20',
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode(array(
+                'variables' => array(
+                    'request' => array(
+                        'id' => $listing_id,
+                        'layouts' => array('SIDEBAR', 'SINGLE_COLUMN'),
+                        'pdpSectionsRequest' => array(
+                            'adults' => 1,
+                            'bypassTargetings' => true,
+                            'categoryTag' => "Tag:8678",
+                            'children' => 0,
+                            'infants' => 0,
+                            'pets' => 0,
+                            'checkIn' => date('Y-m-d', strtotime('+30 days')),
+                            'checkOut' => date('Y-m-d', strtotime('+35 days'))
+                        )
+                    )
+                ),
+                'extensions' => array(
+                    'persistedQuery' => array(
+                        'version' => 1,
+                        'sha256Hash' => '6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343'
+                    )
+                )
+            )),
+            'method' => 'POST'
+        ),
+        // Endpoint 4: Direct listing page
         array(
             'url' => "https://www.airbnb.com/rooms/{$listing_id}",
             'headers' => array(
@@ -446,7 +482,16 @@ function airbnb_analyzer_debug_fetch_callback() {
             'sslverify' => false
         );
         
-        $response = wp_remote_get($endpoint['url'], $args);
+        // Add body for POST requests
+        if (isset($endpoint['body'])) {
+            $args['body'] = $endpoint['body'];
+        }
+        
+        // Use the appropriate request method
+        $method = isset($endpoint['method']) ? $endpoint['method'] : 'GET';
+        $response = ($method === 'POST') ? 
+            wp_remote_post($endpoint['url'], $args) : 
+            wp_remote_get($endpoint['url'], $args);
         
         if (is_wp_error($response)) {
             $response_data["endpoint_{$index}_error"] = $response->get_error_message();
@@ -456,13 +501,14 @@ function airbnb_analyzer_debug_fetch_callback() {
         $status_code = wp_remote_retrieve_response_code($response);
         if ($status_code !== 200) {
             $response_data["endpoint_{$index}_status"] = $status_code;
+            $response_data["endpoint_{$index}_body"] = substr(wp_remote_retrieve_body($response), 0, 1000);
             continue;
         }
         
         $body = wp_remote_retrieve_body($response);
         
-        // For HTML response (endpoint 3)
-        if ($index === 2) {
+        // For HTML response (endpoint 4)
+        if ($index === 3) {
             $response_data['html_sample'] = substr($body, 0, 5000);
             continue;
         }
