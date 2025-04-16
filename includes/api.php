@@ -344,27 +344,49 @@ function construct_airbnb_api_url($listing_id) {
     // Check-out (check-in + 5 days)
     $check_out = date('Y-m-d', strtotime($check_in . ' +5 days'));
     
+    // Base64 encode the listing ID with the StayListing prefix
+    $encoded_id = base64_encode("StayListing:$listing_id");
+    
     // Construct the variables parameter
     $variables = array(
-        'request' => array(
-            'id' => $listing_id,
-            'pdpSectionsRequest' => array(
-                'adults' => 1,
-                'bypassTargetings' => true,
-                'categoryTag' => "Tag:8678",
-                'children' => 0,
-                'disasterId' => null,
-                'infants' => 0,
-                'pets' => 0,
-                'checkIn' => $check_in,
-                'checkOut' => $check_out,
-                'layouts' => array('SIDEBAR', 'SINGLE_COLUMN'),
-                'pdpTypeOverride' => null,
-                'preview' => false,
-                'translateUgc' => null,
-                'treatmentFlags' => array()
-            ),
-            'layoutSections' => array('SIDEBAR', 'SINGLE_COLUMN')
+        'id' => $encoded_id,
+        'pdpSectionsRequest' => array(
+            'adults' => "2",
+            'amenityFilters' => null,
+            'bypassTargetings' => false,
+            'categoryTag' => null,
+            'causeId' => null,
+            'children' => null,
+            'disasterId' => null,
+            'discountedGuestFeeVersion' => null,
+            'displayExtensions' => null,
+            'federatedSearchId' => wp_generate_uuid4(),
+            'forceBoostPriorityMessageType' => null,
+            'hostPreview' => false,
+            'infants' => null,
+            'interactionType' => null,
+            'layouts' => array('SIDEBAR', 'SINGLE_COLUMN'),
+            'pets' => 0,
+            'pdpTypeOverride' => null,
+            'photoId' => null,
+            'preview' => false,
+            'previousStateCheckIn' => null,
+            'previousStateCheckOut' => null,
+            'priceDropSource' => null,
+            'privateBooking' => false,
+            'promotionUuid' => null,
+            'relaxedAmenityIds' => null,
+            'searchId' => null,
+            'selectedCancellationPolicyId' => null,
+            'selectedRatePlanId' => null,
+            'splitStays' => null,
+            'staysBookingMigrationEnabled' => false,
+            'translateUgc' => null,
+            'useNewSectionWrapperApi' => false,
+            'sectionIds' => null,
+            'checkIn' => $check_in,
+            'checkOut' => $check_out,
+            'p3ImpressionId' => 'p3_' . time() . '_' . substr(md5(rand()), 0, 16)
         )
     );
     
@@ -372,15 +394,15 @@ function construct_airbnb_api_url($listing_id) {
     $extensions = array(
         'persistedQuery' => array(
             'version' => 1,
-            'sha256Hash' => '6f2c582da19b486271d60c4b19e7bdd1147184662f1f4e9a83b08211a73d7343'
+            'sha256Hash' => '063357cc871e3c7d764e0536a09ffec74d999d362af071636c719559005a35d4'
         )
     );
     
     // Use the exact URL format that works with Airbnb's API
-    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections';
+    $url = 'https://www.airbnb.com/api/v3/StaysPdpSections/063357cc871e3c7d764e0536a09ffec74d999d362af071636c719559005a35d4';
     $url .= '?operationName=StaysPdpSections';
-    $url .= '&locale=en-US';
-    $url .= '&currency=USD';
+    $url .= '&locale=en-GB';
+    $url .= '&currency=GBP';
     $url .= '&variables=' . urlencode(json_encode($variables));
     $url .= '&extensions=' . urlencode(json_encode($extensions));
     
