@@ -351,7 +351,7 @@ function construct_airbnb_api_url($listing_id) {
             'pdpSectionsRequest' => array(
                 'adults' => 1,
                 'bypassTargetings' => true,
-                'categoryTag' => 'Tag:8678",
+                'categoryTag' => "Tag:8678",
                 'children' => 0,
                 'disasterId' => null,
                 'infants' => 0,
