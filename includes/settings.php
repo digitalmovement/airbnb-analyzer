@@ -395,24 +395,27 @@ function airbnb_analyzer_debug_fetch_callback() {
     // Extract listing ID from URL - updated to handle international domains
     if (preg_match('/airbnb\.[a-z\.]+\/rooms\/(\d+)/', $url, $matches)) {
         $listing_id = $matches[1];
+    } elseif (preg_match('/\/rooms\/(\d+)/', $url, $matches)) {
+        $listing_id = $matches[1];
     } else {
         wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format. Please use a URL like https://www.airbnb.com/rooms/12345'));
     }
     
-    // Use direct URL approach
-    $direct_url = "https://www.airbnb.com/rooms/$listing_id";
+    // Use the Airbnb API directly
+    $api_url = construct_airbnb_api_url($listing_id);
     
     // Use WordPress HTTP API to fetch listing data
     $args = array(
         'headers' => array(
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language' => 'en-US,en;q=0.5',
+            'Accept' => 'application/json',
+            'X-Airbnb-API-Key' => 'd306zoyjsyarp7ifhu67rjxn52tv0t20'
         ),
-        'timeout' => 30
+        'timeout' => 30,
+        'sslverify' => false
     );
     
-    $response = wp_remote_get($direct_url, $args);
+    $response = wp_remote_get($api_url, $args);
     
     if (is_wp_error($response)) {
         wp_send_json_error(array('message' => 'Error fetching data: ' . $response->get_error_message()));
@@ -424,35 +427,94 @@ function airbnb_analyzer_debug_fetch_callback() {
     }
     
     $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
     
-    // Extract JSON data from the page
-    $data = array();
-    if (preg_match('/<script id="data-state" data-state="(.+?)"><\/script>/s', $body, $matches)) {
-        $json_data = html_entity_decode($matches[1]);
-        $data = json_decode($json_data, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            wp_send_json_error(array('message' => 'Error parsing page data: ' . json_last_error_msg()));
-        }
-    } else if (preg_match('/"bootstrapData":({.+?}),"niobeMinimalClientData"/s', $body, $matches)) {
-        $json_data = $matches[1];
-        $data = json_decode($json_data, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            wp_send_json_error(array('message' => 'Error parsing page data (alternative method): ' . json_last_error_msg()));
-        }
-    } else {
-        // If we can't extract JSON, return some basic HTML data
-        $data = array(
-            'html_extract' => substr($body, 0, 10000),
-            'note' => 'Could not extract JSON data from page, showing HTML excerpt instead'
-        );
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        wp_send_json_error(array('message' => 'Error parsing API response: ' . json_last_error_msg()));
     }
     
-    // Return the raw data for debugging
+    // Process the data to extract listing information
+    $extracted_data = array(
+        'id' => $listing_id,
+        'title' => '',
+        'description' => '',
+        'photos' => array(),
+        'price' => 0,
+        'price_currency' => '',
+        'location' => '',
+        'bedrooms' => 0,
+        'bathrooms' => 0,
+        'beds' => 0,
+        'max_guests' => 0,
+        'amenities' => array(),
+        'host_name' => '',
+        'host_is_superhost' => false,
+        'rating' => 0,
+        'review_count' => 0,
+        'property_type' => '',
+        'house_rules' => ''
+    );
+    
+    $parsing_steps = array();
+    
+    // Parse the API response
+    try {
+        if (isset($data['data']['presentation']['stayProductDetailPage']['sections']['sections'])) {
+            $sections = $data['data']['presentation']['stayProductDetailPage']['sections']['sections'];
+            
+            foreach ($sections as $section) {
+                // Extract title from TITLE_DEFAULT section
+                if (isset($section['sectionId']) && $section['sectionId'] === 'TITLE_DEFAULT') {
+                    if (isset($section['section']['title'])) {
+                        $extracted_data['title'] = $section['section']['title'];
+                        $parsing_steps[] = "Extracted title from TITLE_DEFAULT section";
+                    }
+                    
+                    if (isset($section['section']['subtitle'])) {
+                        $extracted_data['location'] = $section['section']['subtitle'];
+                        $parsing_steps[] = "Extracted location from TITLE_DEFAULT section";
+                    }
+                }
+                
+                // Extract description from DESCRIPTION_DEFAULT section
+                if (isset($section['sectionId']) && $section['sectionId'] === 'DESCRIPTION_DEFAULT') {
+                    if (isset($section['section']['htmlDescription']['htmlText'])) {
+                        $extracted_data['description'] = $section['section']['htmlDescription']['htmlText'];
+                        $parsing_steps[] = "Extracted description from DESCRIPTION_DEFAULT section";
+                    }
+                }
+                
+                // Extract photos from PHOTO_TOUR_SCROLLABLE_MODAL section
+                if (isset($section['sectionId']) && $section['sectionId'] === 'PHOTO_TOUR_SCROLLABLE_MODAL') {
+                    if (isset($section['section']['mediaItems']) && is_array($section['section']['mediaItems'])) {
+                        foreach ($section['section']['mediaItems'] as $mediaItem) {
+                            if (isset($mediaItem['baseUrl'])) {
+                                $extracted_data['photos'][] = $mediaItem['baseUrl'];
+                            }
+                        }
+                        $parsing_steps[] = "Extracted " . count($extracted_data['photos']) . " photos from PHOTO_TOUR_SCROLLABLE_MODAL section";
+                    }
+                }
+                
+                // Extract other data from various sections
+                // ... (similar to the main API function)
+            }
+        }
+    } catch (Exception $e) {
+        $parsing_steps[] = "Error parsing API response: " . $e->getMessage();
+    }
+    
+    // Return the raw data and extracted information for debugging
     wp_send_json_success(array(
-        'direct_url' => $direct_url,
-        'data' => $data
+        'api_url' => $api_url,
+        'raw_data' => $data,
+        'extracted_data' => $extracted_data,
+        'parsing_steps' => $parsing_steps,
+        'request_details' => array(
+            'listing_id' => $listing_id,
+            'status_code' => $status_code,
+            'headers' => wp_remote_retrieve_headers($response)->getAll()
+        )
     ));
 }
 add_action('wp_ajax_airbnb_analyzer_debug_fetch', 'airbnb_analyzer_debug_fetch_callback');
