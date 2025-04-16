@@ -413,7 +413,7 @@ function airbnb_analyzer_debug_fetch_callback() {
                 'Referer' => 'https://www.airbnb.com/',
                 'Origin' => 'https://www.airbnb.com',
                 'Cache-Control' => 'no-cache',
-                'Pragma': 'no-cache'
+                'Pragma' => 'no-cache'
             )
         ),
         // Endpoint 2: Direct listing page as fallback
