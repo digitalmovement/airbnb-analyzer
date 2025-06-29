@@ -423,103 +423,127 @@ function airbnb_analyzer_debug_fetch_callback() {
     
     $url = sanitize_text_field($_POST['url']);
     
-    // Extract listing ID from URL - updated to handle international domains
-    if (preg_match('/airbnb\.[a-z\.]+\/rooms\/(\d+)/', $url, $matches)) {
-        $listing_id = $matches[1];
-    } elseif (preg_match('/\/rooms\/(\d+)/', $url, $matches)) {
-        $listing_id = $matches[1];
-    } else {
-        wp_send_json_error(array('message' => 'Invalid Airbnb listing URL format. Please use a URL like https://www.airbnb.com/rooms/12345'));
-    }
+    // Load Brightdata API functions
+    require_once AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php';
     
-    // Try multiple API endpoints
-    $endpoints = array(
-        // Endpoint 1: New StaysPdpSections API
-        array(
-            'url' => construct_airbnb_api_url($listing_id),
-            'headers' => array(
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept' => 'application/json',
-                'Accept-Language' => 'en-GB,en;q=0.9',
-                'Referer' => 'https://www.airbnb.com/',
-                'Origin' => 'https://www.airbnb.com',
-                'Cache-Control' => 'no-cache',
-                'Pragma' => 'no-cache'
-            )
-        ),
-        // Endpoint 2: Direct listing page as fallback
-        array(
-            'url' => "https://www.airbnb.com/rooms/{$listing_id}",
-            'headers' => array(
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language' => 'en-GB,en;q=0.9'
-            )
-        )
+    // Get API credentials
+    $api_key = get_option('airbnb_analyzer_brightdata_api_key');
+    $dataset_id = get_option('airbnb_analyzer_brightdata_dataset_id', 'gd_ld7ll037kqy322v05');
+    $test_mode = get_option('airbnb_analyzer_brightdata_test_mode', false);
+    
+    $debug_data = array(
+        'listing_url' => $url,
+        'api_key_set' => !empty($api_key),
+        'api_key_length' => strlen($api_key),
+        'dataset_id' => $dataset_id,
+        'test_mode' => $test_mode,
+        'timestamp' => date('Y-m-d H:i:s')
     );
     
-    $success = false;
-    $response_data = array();
-    
-    foreach ($endpoints as $index => $endpoint) {
-        $args = array(
-            'headers' => $endpoint['headers'],
-            'timeout' => 30,
-            'sslverify' => false
-        );
-        
-        // Use the appropriate request method
-        $method = 'GET';
-        $response = wp_remote_get($endpoint['url'], $args);
-        
-        if (is_wp_error($response)) {
-            $response_data["endpoint_{$index}_error"] = $response->get_error_message();
-            continue;
-        }
-        
-        $status_code = wp_remote_retrieve_response_code($response);
-        if ($status_code !== 200) {
-            $response_data["endpoint_{$index}_status"] = $status_code;
-            $response_data["endpoint_{$index}_body"] = substr(wp_remote_retrieve_body($response), 0, 1000);
-            continue;
-        }
-        
-        $body = wp_remote_retrieve_body($response);
-        
-        // For HTML response (endpoint 4)
-        if ($index === 1) {
-            $response_data['html_sample'] = substr($body, 0, 5000);
-            continue;
-        }
-        
-        // For JSON responses
-        $data = json_decode($body, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $response_data["endpoint_{$index}_json_error"] = json_last_error_msg();
-            continue;
-        }
-        
-        // We got a valid JSON response
-        $response_data["endpoint_{$index}_data"] = $data;
-        $success = true;
-        break;
-    }
-    
-    if (!$success) {
+    if (empty($api_key)) {
         wp_send_json_error(array(
-            'message' => 'Failed to fetch data from all endpoints',
-            'debug_data' => $response_data
+            'message' => 'Brightdata API key is not configured. Please set it in the settings.',
+            'debug_data' => $debug_data
         ));
     }
     
-    // Return all the data we collected
-    wp_send_json_success(array(
-        'listing_id' => $listing_id,
-        'raw_data' => $response_data,
-        'extracted_data' => array('id' => $listing_id),
-        'parsing_steps' => array('Tried multiple API endpoints')
-    ));
+    // Prepare request data
+    $request_data = array(
+        array(
+            'url' => $url,
+            'country' => 'US'
+        )
+    );
+    
+    // Build API URL
+    $api_url = 'https://api.brightdata.com/datasets/v3/trigger';
+    $api_url .= '?dataset_id=' . $dataset_id;
+    
+    // Add notification URL if not in test mode
+    if (!$test_mode) {
+        $notify_url = site_url('/wp-content/plugins/airbnb-analyzer/notify.php');
+        $api_url .= '&notify=' . urlencode($notify_url);
+        $debug_data['notify_url'] = $notify_url;
+    } else {
+        $debug_data['notify_url'] = 'DISABLED (Test Mode)';
+    }
+    
+    $api_url .= '&include_errors=true';
+    
+    $headers = array(
+        'Authorization' => 'Bearer ' . $api_key,
+        'Content-Type' => 'application/json',
+    );
+    
+    $args = array(
+        'headers' => $headers,
+        'body' => json_encode($request_data),
+        'method' => 'POST',
+        'timeout' => 30
+    );
+    
+    // Add all debug info
+    $debug_data['api_url'] = $api_url;
+    $debug_data['request_headers'] = $headers;
+    $debug_data['request_body'] = $request_data;
+    $debug_data['wp_remote_args'] = $args;
+    
+    // Make the request
+    $response = wp_remote_post($api_url, $args);
+    
+    if (is_wp_error($response)) {
+        $debug_data['wp_error'] = $response->get_error_message();
+        wp_send_json_error(array(
+            'message' => 'WordPress HTTP Error: ' . $response->get_error_message(),
+            'debug_data' => $debug_data
+        ));
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    $response_body = wp_remote_retrieve_body($response);
+    $response_headers = wp_remote_retrieve_headers($response);
+    
+    $debug_data['response_status'] = $status_code;
+    $debug_data['response_headers'] = $response_headers;
+    $debug_data['response_body'] = $response_body;
+    
+    // Try to parse JSON response
+    $response_data = json_decode($response_body, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+        $debug_data['response_json'] = $response_data;
+    } else {
+        $debug_data['json_error'] = json_last_error_msg();
+    }
+    
+    if ($status_code === 200) {
+        wp_send_json_success(array(
+            'message' => 'Brightdata API request successful!',
+            'raw_data' => $debug_data,
+            'extracted_data' => isset($response_data['snapshot_id']) ? array('snapshot_id' => $response_data['snapshot_id']) : array(),
+            'request_details' => array(
+                'url' => $api_url,
+                'method' => 'POST',
+                'headers' => $headers,
+                'body' => json_encode($request_data),
+                'status' => $status_code
+            )
+        ));
+    } else {
+        wp_send_json_error(array(
+            'message' => "Brightdata API Error: HTTP {$status_code}",
+            'debug_data' => $debug_data,
+            'error_analysis' => array(
+                'status_code' => $status_code,
+                'common_causes' => array(
+                    400 => 'Bad Request - Invalid parameters, malformed URL, or notification URL issue',
+                    401 => 'Unauthorized - Invalid API key',
+                    403 => 'Forbidden - API key lacks permissions for this dataset',
+                    404 => 'Not Found - Invalid dataset ID',
+                    429 => 'Rate Limited - Too many requests'
+                )
+            )
+        ));
+    }
 }
 add_action('wp_ajax_airbnb_analyzer_debug_fetch', 'airbnb_analyzer_debug_fetch_callback');
 
