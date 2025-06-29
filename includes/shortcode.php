@@ -61,7 +61,7 @@ function airbnb_analyzer_shortcode($atts) {
         </div>
         
         <!-- Results container -->
-        <div class="airbnb-analyzer-content" style="display: none;"></div>
+        <div id="airbnb-analyzer-results" class="airbnb-analyzer-content" style="display: none;"></div>
     </div>
     <?php
     

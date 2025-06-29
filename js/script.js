@@ -136,13 +136,19 @@ jQuery(document).ready(function($) {
         
         console.log('Generated HTML:', html);
         
+        // Check if results container exists
+        var resultsContainer = $('#airbnb-analyzer-results');
+        console.log('Results container found:', resultsContainer.length > 0);
+        console.log('Results container element:', resultsContainer);
+        
         // Set the HTML
-        $('#airbnb-analyzer-results').html(html);
+        resultsContainer.html(html);
         console.log('HTML set to results container');
         
         // Show results container
-        $('#airbnb-analyzer-results').show();
+        resultsContainer.show();
         console.log('Results container shown');
+        console.log('Container is visible:', resultsContainer.is(':visible'));
         
         // Handle "Analyze Another" button
         $('#analyze-another').on('click', function() {
