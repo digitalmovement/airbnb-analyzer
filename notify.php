@@ -202,9 +202,99 @@ function send_analysis_email($email, $listing_url, $analysis = null, $error_mess
             }
             
             // Add Claude analysis if available
-            if (isset($analysis['claude_analysis'])) {
+            if (isset($analysis['claude_analysis']) && is_array($analysis['claude_analysis'])) {
                 $message .= "AI ANALYSIS:\n";
-                $message .= $analysis['claude_analysis'] . "\n\n";
+                
+                // Title analysis
+                if (isset($analysis['claude_analysis']['title'])) {
+                    $title_data = $analysis['claude_analysis']['title'];
+                    $message .= "\nTITLE ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($title_data['rating']) ? $title_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "Feedback: " . (isset($title_data['feedback']) ? $title_data['feedback'] : 'N/A') . "\n";
+                    if (isset($title_data['alternative_titles']) && is_array($title_data['alternative_titles'])) {
+                        $message .= "Suggested Alternatives:\n";
+                        foreach ($title_data['alternative_titles'] as $alt_title) {
+                            $message .= "- " . $alt_title . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
+                
+                // Description analysis
+                if (isset($analysis['claude_analysis']['description'])) {
+                    $desc_data = $analysis['claude_analysis']['description'];
+                    $message .= "DESCRIPTION ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($desc_data['rating']) ? $desc_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "First Impression: " . (isset($desc_data['first_impression']) ? $desc_data['first_impression'] : 'N/A') . "\n";
+                    $message .= "Overall Feedback: " . (isset($desc_data['overall_feedback']) ? $desc_data['overall_feedback'] : 'N/A') . "\n";
+                    if (isset($desc_data['suggestions']) && is_array($desc_data['suggestions'])) {
+                        $message .= "Suggestions:\n";
+                        foreach ($desc_data['suggestions'] as $suggestion) {
+                            $message .= "- " . $suggestion . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
+                
+                // Host analysis
+                if (isset($analysis['claude_analysis']['host'])) {
+                    $host_data = $analysis['claude_analysis']['host'];
+                    $message .= "HOST PROFILE ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($host_data['rating']) ? $host_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "Feedback: " . (isset($host_data['feedback']) ? $host_data['feedback'] : 'N/A') . "\n";
+                    if (isset($host_data['suggestions']) && is_array($host_data['suggestions'])) {
+                        $message .= "Suggestions:\n";
+                        foreach ($host_data['suggestions'] as $suggestion) {
+                            $message .= "- " . $suggestion . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
+                
+                // Amenities analysis
+                if (isset($analysis['claude_analysis']['amenities'])) {
+                    $amenities_data = $analysis['claude_analysis']['amenities'];
+                    $message .= "AMENITIES ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($amenities_data['rating']) ? $amenities_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "Feedback: " . (isset($amenities_data['feedback']) ? $amenities_data['feedback'] : 'N/A') . "\n";
+                    if (isset($amenities_data['suggestions']) && is_array($amenities_data['suggestions'])) {
+                        $message .= "Suggestions:\n";
+                        foreach ($amenities_data['suggestions'] as $suggestion) {
+                            $message .= "- " . $suggestion . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
+                
+                // Reviews analysis
+                if (isset($analysis['claude_analysis']['reviews'])) {
+                    $reviews_data = $analysis['claude_analysis']['reviews'];
+                    $message .= "REVIEWS ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($reviews_data['rating']) ? $reviews_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "Feedback: " . (isset($reviews_data['feedback']) ? $reviews_data['feedback'] : 'N/A') . "\n";
+                    if (isset($reviews_data['suggestions']) && is_array($reviews_data['suggestions'])) {
+                        $message .= "Suggestions:\n";
+                        foreach ($reviews_data['suggestions'] as $suggestion) {
+                            $message .= "- " . $suggestion . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
+                
+                // Cancellation analysis
+                if (isset($analysis['claude_analysis']['cancellation'])) {
+                    $cancel_data = $analysis['claude_analysis']['cancellation'];
+                    $message .= "CANCELLATION POLICY ANALYSIS:\n";
+                    $message .= "Rating: " . (isset($cancel_data['rating']) ? $cancel_data['rating'] : 'N/A') . "/10\n";
+                    $message .= "Feedback: " . (isset($cancel_data['feedback']) ? $cancel_data['feedback'] : 'N/A') . "\n";
+                    if (isset($cancel_data['suggestions']) && is_array($cancel_data['suggestions'])) {
+                        $message .= "Suggestions:\n";
+                        foreach ($cancel_data['suggestions'] as $suggestion) {
+                            $message .= "- " . $suggestion . "\n";
+                        }
+                    }
+                    $message .= "\n";
+                }
             }
         } else {
             $message .= "Analysis completed, but no detailed results available.\n\n";
