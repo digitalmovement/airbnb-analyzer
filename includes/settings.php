@@ -27,6 +27,11 @@ function airbnb_analyzer_register_settings() {
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_api_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_dataset_id');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_test_mode', array(
+        'type' => 'boolean',
+        'default' => false,
+        'sanitize_callback' => 'rest_sanitize_boolean',
+    ));
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_site_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_secret_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_enable_debugging', array(
@@ -70,6 +75,16 @@ function airbnb_analyzer_settings_page() {
                     <td>
                         <input type="text" name="airbnb_analyzer_brightdata_dataset_id" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_dataset_id', 'gd_ld7ll037kqy322v05')); ?>" class="regular-text" />
                         <p class="description">Brightdata dataset ID for Airbnb data collection. Default: gd_ld7ll037kqy322v05</p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Test Mode (No Notifications)</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="airbnb_analyzer_brightdata_test_mode" value="1" <?php checked(get_option('airbnb_analyzer_brightdata_test_mode'), true); ?> />
+                            Enable test mode (disable email notifications for testing)
+                        </label>
+                        <p class="description">When enabled, requests won't include notification URL. Use this if you're getting 400 errors.</p>
                     </td>
                 </tr>
                 <tr valign="top">

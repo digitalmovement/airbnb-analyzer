@@ -22,9 +22,6 @@ function brightdata_trigger_scraping($listing_url, $email) {
         return new WP_Error('missing_api_key', 'Brightdata API key is not configured. Please configure it in the settings.');
     }
     
-    // Create notification URL
-    $notify_url = site_url('/wp-content/plugins/airbnb-analyzer/notify.php');
-    
     // Prepare the API request data
     $data = array(
         array(
@@ -38,7 +35,17 @@ function brightdata_trigger_scraping($listing_url, $email) {
     
     $api_url = 'https://api.brightdata.com/datasets/v3/trigger';
     $api_url .= '?dataset_id=' . $dataset_id;
-    $api_url .= '&notify=' . urlencode($notify_url);
+    
+    // Check if test mode is enabled (no notifications)
+    $test_mode = get_option('airbnb_analyzer_brightdata_test_mode', false);
+    $notify_url = '';
+    
+    if (!$test_mode) {
+        // Create notification URL
+        $notify_url = site_url('/wp-content/plugins/airbnb-analyzer/notify.php');
+        $api_url .= '&notify=' . urlencode($notify_url);
+    }
+    
     $api_url .= '&include_errors=true';
     
     $args = array(
@@ -54,7 +61,11 @@ function brightdata_trigger_scraping($listing_url, $email) {
     // Log debug info
     if (function_exists('airbnb_analyzer_debug_log')) {
         airbnb_analyzer_debug_log("Triggering Brightdata scraping for URL: $listing_url", 'Brightdata API');
+        airbnb_analyzer_debug_log("Test Mode: " . ($test_mode ? 'ENABLED' : 'DISABLED'), 'Brightdata API');
         airbnb_analyzer_debug_log("API URL: $api_url", 'Brightdata API');
+        airbnb_analyzer_debug_log("Notification URL: " . ($notify_url ? $notify_url : 'NONE (Test Mode)'), 'Brightdata API');
+        airbnb_analyzer_debug_log("Request Body: " . json_encode($data), 'Brightdata API');
+        airbnb_analyzer_debug_log("Request Headers: " . json_encode($args['headers']), 'Brightdata API');
     }
     
     $response = wp_remote_post($api_url, $args);
