@@ -19,6 +19,7 @@ define('AIRBNB_ANALYZER_URL', plugin_dir_url(__FILE__));
 require_once(AIRBNB_ANALYZER_PATH . 'includes/shortcode.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/analyzer.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/api.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/settings.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/claude-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/admin.php');
@@ -90,6 +91,12 @@ function airbnb_analyzer_process_request() {
         wp_send_json_error(array('message' => 'Please provide a valid email address'));
     }
     
+    // Check if Brightdata API key is configured
+    $brightdata_api_key = get_option('airbnb_analyzer_brightdata_api_key');
+    if (empty($brightdata_api_key)) {
+        wp_send_json_error(array('message' => 'Brightdata API key is not configured. Please contact the administrator.'));
+    }
+    
     // Verify CAPTCHA
     $recaptcha_secret = get_option('airbnb_analyzer_recaptcha_secret_key');
     $verify_response = wp_remote_post('https://www.google.com/recaptcha/api/siteverify', array(
@@ -112,27 +119,19 @@ function airbnb_analyzer_process_request() {
     // Store the email in the database
     airbnb_analyzer_store_email($email, $listing_url);
     
-    // Get listing data
-    $listing_data = airbnb_analyzer_get_listing_data($listing_url);
+    // Trigger Brightdata scraping (async)
+    $brightdata_result = brightdata_trigger_scraping($listing_url, $email);
     
-    if (is_wp_error($listing_data)) {
-        wp_send_json_error(array('message' => $listing_data->get_error_message()));
+    if (is_wp_error($brightdata_result)) {
+        wp_send_json_error(array('message' => $brightdata_result->get_error_message()));
     }
     
-    // Check if listing data is empty
-    if (empty($listing_data) || !is_array($listing_data)) {
-        wp_send_json_error(array('message' => 'Unable to retrieve listing data. Please check the URL and try again.'));
-    }
-    
-    // Analyze listing with Claude if API key is available
-    if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
-        $analysis = airbnb_analyzer_analyze_listing_with_claude($listing_data);
-    } else {
-        $analysis = airbnb_analyzer_analyze_listing($listing_data);
-    }
-    
-    // Return results
-    wp_send_json_success($analysis);
+    // Return success with pending status
+    wp_send_json_success(array(
+        'status' => 'pending',
+        'message' => 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. You will receive the results via email within 1-2 minutes.',
+        'snapshot_id' => $brightdata_result['snapshot_id']
+    ));
 }
 
 /**

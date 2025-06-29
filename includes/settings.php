@@ -25,6 +25,7 @@ add_action('admin_menu', 'airbnb_analyzer_add_settings_page');
  */
 function airbnb_analyzer_register_settings() {
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_api_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_site_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_secret_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_enable_debugging', array(
@@ -57,10 +58,17 @@ function airbnb_analyzer_settings_page() {
             <h2>API Settings</h2>
             <table class="form-table">
                 <tr valign="top">
+                    <th scope="row">Brightdata API Key</th>
+                    <td>
+                        <input type="password" name="airbnb_analyzer_brightdata_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_api_key')); ?>" class="regular-text" />
+                        <p class="description">Enter your Brightdata API key to fetch Airbnb listing data. Required for the analyzer to work.</p>
+                    </td>
+                </tr>
+                <tr valign="top">
                     <th scope="row">Claude API Key</th>
                     <td>
                         <input type="password" name="airbnb_analyzer_claude_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_claude_api_key')); ?>" class="regular-text" />
-                        <p class="description">Enter your Claude API key to enable AI-powered listing analysis.</p>
+                        <p class="description">Enter your Claude API key to enable AI-powered listing analysis (optional).</p>
                     </td>
                 </tr>
             </table>

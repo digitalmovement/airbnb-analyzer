@@ -5,33 +5,48 @@
 
 /**
  * Get listing data from AirBnB
+ * Note: This function now uses Brightdata API instead of direct Airbnb API
+ * For async processing, use brightdata_trigger_scraping() instead
  * 
  * @param string $listing_url The AirBnB listing URL
  * @return array|WP_Error Listing data or error
  */
 function airbnb_analyzer_get_listing_data($listing_url) {
-    // Extract listing ID from URL - updated to handle international domains
-    if (preg_match('/airbnb\.[a-z\.]+\/rooms\/(\d+)/', $listing_url, $matches)) {
-        $listing_id = $matches[1];
-    } elseif (preg_match('/\/rooms\/(\d+)/', $listing_url, $matches)) {
-        $listing_id = $matches[1];
-    } elseif (preg_match('/\/h\/([^\/\?]+)/', $listing_url, $matches)) {
-        // Handle /h/ style URLs
-        $listing_slug = $matches[1];
-        // We need to make an initial request to get the actual listing ID
-        $response = wp_remote_get($listing_url);
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        $body = wp_remote_retrieve_body($response);
-        if (preg_match('/\"id\":\"StayListing:(\d+)\"/', $body, $id_matches)) {
-            $listing_id = $id_matches[1];
-        } else {
-            return new WP_Error('invalid_url', 'Could not extract listing ID from URL');
-        }
-    } else {
-        return new WP_Error('invalid_url', 'Invalid AirBnB listing URL format');
+    // Check if Brightdata API is available
+    $brightdata_api_key = get_option('airbnb_analyzer_brightdata_api_key');
+    if (empty($brightdata_api_key)) {
+        return new WP_Error('api_unavailable', 'Brightdata API key is not configured. The old Airbnb API is no longer available.');
     }
+    
+    // Try to get data from a recent successful request first
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    $recent_request = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE listing_url = %s AND status = 'completed' ORDER BY date_completed DESC LIMIT 1",
+        $listing_url
+    ));
+    
+    if ($recent_request && !empty($recent_request->response_data)) {
+        $response_data = json_decode($recent_request->response_data, true);
+        if (isset($response_data['listing_data'])) {
+            if (function_exists('airbnb_analyzer_debug_log')) {
+                airbnb_analyzer_debug_log("Using cached listing data for URL: $listing_url", 'API Cache');
+            }
+            return $response_data['listing_data'];
+        }
+    }
+    
+    // If no cached data, return error as this function is now deprecated for new requests
+    return new WP_Error('deprecated_function', 'This function is deprecated. Please use the async brightdata_trigger_scraping() function instead, or use the web interface which will email you the results.');
+}
+
+/**
+ * Legacy function - now deprecated in favor of Brightdata API
+ * This function kept all the old Airbnb API logic for reference
+ */
+function airbnb_analyzer_get_listing_data_legacy($listing_url) {
+    return new WP_Error('deprecated', 'This function has been replaced by Brightdata API integration.');
+}
     
     // Log debug info
     if (function_exists('airbnb_analyzer_debug_log')) {

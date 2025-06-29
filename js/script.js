@@ -61,8 +61,13 @@ jQuery(document).ready(function($) {
                 $('.airbnb-analyzer-loading').hide();
                 
                 if (response.success) {
-                    // Display results
-                    displayResults(response.data);
+                    if (response.data.status === 'pending') {
+                        // Show pending status message
+                        displayPendingMessage(response.data);
+                    } else {
+                        // Display results (for backward compatibility)
+                        displayResults(response.data);
+                    }
                 } else {
                     // Show error message
                     alert(response.data.message || 'An error occurred. Please try again.');
@@ -83,6 +88,54 @@ jQuery(document).ready(function($) {
         });
     });
     
+    /**
+     * Display pending message for async processing
+     */
+    function displayPendingMessage(data) {
+        var html = '';
+        
+        html += '<div class="airbnb-analyzer-pending">';
+        html += '<div class="pending-icon">⏳</div>';
+        html += '<h3>Analysis in Progress</h3>';
+        html += '<p>' + data.message + '</p>';
+        html += '<div class="pending-details">';
+        html += '<p><strong>What happens next:</strong></p>';
+        html += '<ul>';
+        html += '<li>Our system is now scraping your Airbnb listing data</li>';
+        html += '<li>This process takes 1-2 minutes to complete</li>';
+        html += '<li>Once finished, we\'ll analyze your listing and send the results to your email</li>';
+        html += '<li>You can close this page - the analysis will continue in the background</li>';
+        html += '</ul>';
+        html += '</div>';
+        if (data.snapshot_id) {
+            html += '<div class="pending-reference">';
+            html += '<p><small>Reference ID: ' + data.snapshot_id + '</small></p>';
+            html += '</div>';
+        }
+        html += '<div class="pending-actions">';
+        html += '<button type="button" id="analyze-another" class="button">Analyze Another Listing</button>';
+        html += '</div>';
+        html += '</div>';
+        
+        // Set the HTML
+        $('#airbnb-analyzer-results').html(html);
+        
+        // Show results container
+        $('#airbnb-analyzer-results').show();
+        
+        // Handle "Analyze Another" button
+        $('#analyze-another').on('click', function() {
+            // Reset form
+            $('#airbnb-listing-url').val('');
+            $('#airbnb-analyzer-email').val('');
+            grecaptcha.reset();
+            
+            // Hide results and show step 1
+            $('#airbnb-analyzer-results').hide();
+            $('#airbnb-analyzer-step-1').show();
+        });
+    }
+
     /**
      * Display analysis results
      */
