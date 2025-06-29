@@ -29,7 +29,7 @@ function airbnb_analyzer_get_listing_data($listing_url) {
     if ($recent_request && !empty($recent_request->response_data)) {
         $response_data = json_decode($recent_request->response_data, true);
         if (isset($response_data['listing_data'])) {
-            if (function_exists('airbnb_analyzer_debug_log')) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
                 airbnb_analyzer_debug_log("Using cached listing data for URL: $listing_url", 'API Cache');
             }
             return $response_data['listing_data'];

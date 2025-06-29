@@ -22,6 +22,15 @@ function airbnb_analyzer_add_admin_menu() {
     
     add_submenu_page(
         'airbnb-analyzer',
+        'Analysis Statistics',
+        'Statistics',
+        'manage_options',
+        'airbnb-analyzer-stats',
+        'airbnb_analyzer_stats_page'
+    );
+    
+    add_submenu_page(
+        'airbnb-analyzer',
         'Email List',
         'Email List',
         'manage_options',
@@ -82,6 +91,192 @@ function airbnb_analyzer_admin_page() {
             
             <p><a href="<?php echo admin_url('admin.php?page=airbnb-analyzer-emails'); ?>" class="button">View All Emails</a></p>
         <?php endif; ?>
+    </div>
+    <?php
+}
+
+// Statistics page content
+function airbnb_analyzer_stats_page() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    // Get overall statistics
+    $total_requests = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+    $completed_requests = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE status = 'completed'");
+    $pending_requests = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE status = 'pending'");
+    $error_requests = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE status = 'error'");
+    $total_views = $wpdb->get_var("SELECT SUM(views) FROM $table_name WHERE status = 'completed'");
+    $viewed_results = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE status = 'completed' AND views > 0");
+    
+    // Get recent completed analyses
+    $recent_analyses = $wpdb->get_results(
+        "SELECT snapshot_id, listing_url, email, views, last_viewed, date_created, date_completed 
+         FROM $table_name 
+         WHERE status = 'completed' 
+         ORDER BY date_completed DESC 
+         LIMIT 10"
+    );
+    
+    // Get top viewed results
+    $top_viewed = $wpdb->get_results(
+        "SELECT snapshot_id, listing_url, email, views, last_viewed, date_completed 
+         FROM $table_name 
+         WHERE status = 'completed' AND views > 0 
+         ORDER BY views DESC 
+         LIMIT 10"
+    );
+    
+    // Calculate engagement rate
+    $engagement_rate = $completed_requests > 0 ? round(($viewed_results / $completed_requests) * 100, 1) : 0;
+    $average_views = $completed_requests > 0 ? round($total_views / $completed_requests, 1) : 0;
+    
+    ?>
+    <div class="wrap">
+        <h1>📊 Analysis Statistics Dashboard</h1>
+        
+        <div class="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Total Requests</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #0073aa;"><?php echo $total_requests; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Completed</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #46b450;"><?php echo $completed_requests; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Pending</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #ffb900;"><?php echo $pending_requests; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Errors</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #dc3232;"><?php echo $error_requests; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Total Views</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #7c3aed;"><?php echo $total_views; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Engagement Rate</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #059669;"><?php echo $engagement_rate; ?>%</div>
+                <small style="color: #666;"><?php echo $viewed_results; ?>/<?php echo $completed_requests; ?> viewed</small>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+            <!-- Recent Completed Analyses -->
+            <div>
+                <h2>🔬 Recent Completed Analyses</h2>
+                <div style="background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <table class="wp-list-table widefat fixed striped" style="border: none;">
+                        <thead>
+                            <tr>
+                                <th>Listing</th>
+                                <th>Email</th>
+                                <th>Views</th>
+                                <th>Completed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($recent_analyses): ?>
+                                <?php foreach ($recent_analyses as $analysis): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="<?php echo esc_url($analysis->listing_url); ?>" target="_blank" title="<?php echo esc_attr($analysis->listing_url); ?>">
+                                                <?php echo esc_html(parse_url($analysis->listing_url, PHP_URL_HOST) . '/.../rooms/...'); ?>
+                                            </a>
+                                        </td>
+                                        <td><?php echo esc_html($analysis->email); ?></td>
+                                        <td>
+                                            <span style="background: <?php echo $analysis->views > 0 ? '#46b450' : '#ccc'; ?>; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">
+                                                <?php echo $analysis->views; ?>
+                                            </span>
+                                        </td>
+                                        <td><?php echo date('M j, g:i A', strtotime($analysis->date_completed)); ?></td>
+                                        <td>
+                                            <a href="<?php echo site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($analysis->snapshot_id)); ?>" 
+                                               target="_blank" class="button button-small">
+                                                View Results
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr><td colspan="5">No completed analyses found.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Top Viewed Results -->
+            <div>
+                <h2>👁️ Most Viewed Results</h2>
+                <div style="background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    <table class="wp-list-table widefat fixed striped" style="border: none;">
+                        <thead>
+                            <tr>
+                                <th>Listing</th>
+                                <th>Views</th>
+                                <th>Last Viewed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($top_viewed): ?>
+                                <?php foreach ($top_viewed as $result): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="<?php echo esc_url($result->listing_url); ?>" target="_blank" title="<?php echo esc_attr($result->listing_url); ?>">
+                                                <?php echo esc_html(parse_url($result->listing_url, PHP_URL_HOST) . '/.../rooms/...'); ?>
+                                            </a>
+                                            <br><small style="color: #666;"><?php echo esc_html($result->email); ?></small>
+                                        </td>
+                                        <td>
+                                            <span style="background: #7c3aed; color: white; padding: 2px 8px; border-radius: 12px; font-weight: bold;">
+                                                <?php echo $result->views; ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if ($result->last_viewed): ?>
+                                                <?php echo date('M j, g:i A', strtotime($result->last_viewed)); ?>
+                                            <?php else: ?>
+                                                <span style="color: #999;">Never</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <a href="<?php echo site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($result->snapshot_id)); ?>" 
+                                               target="_blank" class="button button-small">
+                                                View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr><td colspan="4">No viewed results found.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #0073aa;">
+            <h3 style="margin: 0 0 10px 0;">📈 Key Insights</h3>
+            <ul style="margin: 0; padding-left: 20px;">
+                <li><strong>Engagement Rate:</strong> <?php echo $engagement_rate; ?>% of completed analyses are viewed by users</li>
+                <li><strong>Average Views:</strong> <?php echo $average_views; ?> views per completed analysis</li>
+                <li><strong>Success Rate:</strong> <?php echo $total_requests > 0 ? round(($completed_requests / $total_requests) * 100, 1) : 0; ?>% of requests complete successfully</li>
+                <?php if ($pending_requests > 0): ?>
+                <li><strong>Note:</strong> <?php echo $pending_requests; ?> requests are still processing</li>
+                <?php endif; ?>
+            </ul>
+        </div>
     </div>
     <?php
 }

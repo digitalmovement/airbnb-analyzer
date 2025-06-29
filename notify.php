@@ -102,7 +102,7 @@ function handle_brightdata_notification() {
         }
         
         // Send error email
-        send_analysis_email($request->email, $request->listing_url, null, $brightdata_response->get_error_message());
+        send_analysis_email($request->email, $request->listing_url, null, $brightdata_response->get_error_message(), $snapshot_id);
         
         http_response_code(500);
         echo json_encode(array('error' => $brightdata_response->get_error_message()));
@@ -121,7 +121,7 @@ function handle_brightdata_notification() {
         }
         
         // Send error email
-        send_analysis_email($request->email, $request->listing_url, null, 'No listing data found in the response');
+        send_analysis_email($request->email, $request->listing_url, null, 'No listing data found in the response', $snapshot_id);
         
         http_response_code(500);
         echo json_encode(array('error' => 'No listing data found'));
@@ -143,7 +143,7 @@ function handle_brightdata_notification() {
     ));
     
     // Send the analysis via email
-    send_analysis_email($request->email, $request->listing_url, $analysis);
+    send_analysis_email($request->email, $request->listing_url, $analysis, null, $snapshot_id);
     
     if (function_exists('airbnb_analyzer_debug_log')) {
         airbnb_analyzer_debug_log("Analysis completed and sent for snapshot ID: $snapshot_id", 'Brightdata Notification');
@@ -158,7 +158,7 @@ function handle_brightdata_notification() {
 /**
  * Send analysis results via email
  */
-function send_analysis_email($email, $listing_url, $analysis = null, $error_message = null) {
+function send_analysis_email($email, $listing_url, $analysis = null, $error_message = null, $snapshot_id = null) {
     $subject = 'AirBnB Listing Analysis Results';
     
     if ($error_message) {
@@ -168,139 +168,46 @@ function send_analysis_email($email, $listing_url, $analysis = null, $error_mess
         $message .= "Error: $error_message\n\n";
         $message .= "Please try again or contact support if the problem persists.";
     } else {
-        $message = "Your Airbnb listing analysis is complete!\n\n";
-        $message .= "Listing URL: $listing_url\n\n";
+        $site_name = get_bloginfo('name');
+        $results_url = site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($snapshot_id));
         
-        if ($analysis && is_array($analysis)) {
-            $message .= "=== ANALYSIS RESULTS ===\n\n";
-            
-            // Add title analysis
-            if (isset($analysis['title'])) {
-                $message .= "TITLE ANALYSIS:\n";
-                $message .= "Length: " . (isset($analysis['title']['length']) ? $analysis['title']['length'] : 'N/A') . " characters\n";
-                $message .= "Recommendation: " . (isset($analysis['title']['recommendation']) ? $analysis['title']['recommendation'] : 'N/A') . "\n\n";
-            }
-            
-            // Add description analysis
-            if (isset($analysis['description'])) {
-                $message .= "DESCRIPTION ANALYSIS:\n";
-                $message .= "Length: " . (isset($analysis['description']['length']) ? $analysis['description']['length'] : 'N/A') . " characters\n";
-                $message .= "Recommendation: " . (isset($analysis['description']['recommendation']) ? $analysis['description']['recommendation'] : 'N/A') . "\n\n";
-            }
-            
-            // Add photos analysis
-            if (isset($analysis['photos'])) {
-                $message .= "PHOTOS ANALYSIS:\n";
-                $message .= "Count: " . (isset($analysis['photos']['count']) ? $analysis['photos']['count'] : 'N/A') . " photos\n";
-                $message .= "Recommendation: " . (isset($analysis['photos']['recommendation']) ? $analysis['photos']['recommendation'] : 'N/A') . "\n\n";
-            }
-            
-            // Add overall recommendation
-            if (isset($analysis['overall_recommendation'])) {
-                $message .= "OVERALL RECOMMENDATION:\n";
-                $message .= $analysis['overall_recommendation'] . "\n\n";
-            }
-            
-            // Add Claude analysis if available
-            if (isset($analysis['claude_analysis']) && is_array($analysis['claude_analysis'])) {
-                $message .= "AI ANALYSIS:\n";
-                
-                // Title analysis
-                if (isset($analysis['claude_analysis']['title'])) {
-                    $title_data = $analysis['claude_analysis']['title'];
-                    $message .= "\nTITLE ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($title_data['rating']) ? $title_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "Feedback: " . (isset($title_data['feedback']) ? $title_data['feedback'] : 'N/A') . "\n";
-                    if (isset($title_data['alternative_titles']) && is_array($title_data['alternative_titles'])) {
-                        $message .= "Suggested Alternatives:\n";
-                        foreach ($title_data['alternative_titles'] as $alt_title) {
-                            $message .= "- " . $alt_title . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-                
-                // Description analysis
-                if (isset($analysis['claude_analysis']['description'])) {
-                    $desc_data = $analysis['claude_analysis']['description'];
-                    $message .= "DESCRIPTION ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($desc_data['rating']) ? $desc_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "First Impression: " . (isset($desc_data['first_impression']) ? $desc_data['first_impression'] : 'N/A') . "\n";
-                    $message .= "Overall Feedback: " . (isset($desc_data['overall_feedback']) ? $desc_data['overall_feedback'] : 'N/A') . "\n";
-                    if (isset($desc_data['suggestions']) && is_array($desc_data['suggestions'])) {
-                        $message .= "Suggestions:\n";
-                        foreach ($desc_data['suggestions'] as $suggestion) {
-                            $message .= "- " . $suggestion . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-                
-                // Host analysis
-                if (isset($analysis['claude_analysis']['host'])) {
-                    $host_data = $analysis['claude_analysis']['host'];
-                    $message .= "HOST PROFILE ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($host_data['rating']) ? $host_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "Feedback: " . (isset($host_data['feedback']) ? $host_data['feedback'] : 'N/A') . "\n";
-                    if (isset($host_data['suggestions']) && is_array($host_data['suggestions'])) {
-                        $message .= "Suggestions:\n";
-                        foreach ($host_data['suggestions'] as $suggestion) {
-                            $message .= "- " . $suggestion . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-                
-                // Amenities analysis
-                if (isset($analysis['claude_analysis']['amenities'])) {
-                    $amenities_data = $analysis['claude_analysis']['amenities'];
-                    $message .= "AMENITIES ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($amenities_data['rating']) ? $amenities_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "Feedback: " . (isset($amenities_data['feedback']) ? $amenities_data['feedback'] : 'N/A') . "\n";
-                    if (isset($amenities_data['suggestions']) && is_array($amenities_data['suggestions'])) {
-                        $message .= "Suggestions:\n";
-                        foreach ($amenities_data['suggestions'] as $suggestion) {
-                            $message .= "- " . $suggestion . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-                
-                // Reviews analysis
-                if (isset($analysis['claude_analysis']['reviews'])) {
-                    $reviews_data = $analysis['claude_analysis']['reviews'];
-                    $message .= "REVIEWS ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($reviews_data['rating']) ? $reviews_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "Feedback: " . (isset($reviews_data['feedback']) ? $reviews_data['feedback'] : 'N/A') . "\n";
-                    if (isset($reviews_data['suggestions']) && is_array($reviews_data['suggestions'])) {
-                        $message .= "Suggestions:\n";
-                        foreach ($reviews_data['suggestions'] as $suggestion) {
-                            $message .= "- " . $suggestion . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-                
-                // Cancellation analysis
-                if (isset($analysis['claude_analysis']['cancellation'])) {
-                    $cancel_data = $analysis['claude_analysis']['cancellation'];
-                    $message .= "CANCELLATION POLICY ANALYSIS:\n";
-                    $message .= "Rating: " . (isset($cancel_data['rating']) ? $cancel_data['rating'] : 'N/A') . "/10\n";
-                    $message .= "Feedback: " . (isset($cancel_data['feedback']) ? $cancel_data['feedback'] : 'N/A') . "\n";
-                    if (isset($cancel_data['suggestions']) && is_array($cancel_data['suggestions'])) {
-                        $message .= "Suggestions:\n";
-                        foreach ($cancel_data['suggestions'] as $suggestion) {
-                            $message .= "- " . $suggestion . "\n";
-                        }
-                    }
-                    $message .= "\n";
-                }
-            }
+        $message = "🎉 Great news! Your Airbnb listing analysis is complete!\n\n";
+        $message .= "📍 Analyzed Listing: $listing_url\n\n";
+        
+        // Add a quick preview
+        $has_ai_analysis = isset($analysis['claude_analysis']) && is_array($analysis['claude_analysis']);
+        
+        if ($has_ai_analysis) {
+            $message .= "✨ Your analysis includes AI-powered insights covering:\n";
+            $message .= "• Title optimization with alternative suggestions\n";
+            $message .= "• Description analysis and improvement tips\n";
+            $message .= "• Host profile recommendations\n";
+            $message .= "• Amenities analysis\n";
+            $message .= "• Review performance insights\n";
+            $message .= "• Cancellation policy recommendations\n\n";
         } else {
-            $message .= "Analysis completed, but no detailed results available.\n\n";
+            $message .= "📊 Your analysis includes:\n";
+            $message .= "• Title and description optimization\n";
+            $message .= "• Photo recommendations\n";
+            $message .= "• Amenities analysis\n";
+            $message .= "• Overall improvement suggestions\n\n";
         }
         
-        $message .= "Thank you for using our Airbnb Listing Analyzer!";
+        $message .= "🔗 VIEW YOUR DETAILED RESULTS:\n";
+        $message .= "$results_url\n\n";
+        
+        $message .= "💡 Why view online?\n";
+        $message .= "• Beautiful, easy-to-read formatting\n";
+        $message .= "• Interactive sections and ratings\n";
+        $message .= "• Mobile-friendly design\n";
+        $message .= "• Always accessible with your unique link\n\n";
+        
+        $message .= "🔒 Privacy: Your results link is private and secure.\n";
+        $message .= "📱 Mobile-friendly: View on any device, anytime.\n\n";
+        
+        $message .= "Questions? Reply to this email for support.\n\n";
+        $message .= "Thank you for using $site_name!\n";
+        $message .= "🏠 Making your Airbnb listing shine ✨";
     }
     
     // Send email

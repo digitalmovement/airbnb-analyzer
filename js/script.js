@@ -60,24 +60,16 @@ jQuery(document).ready(function($) {
                 // Hide loading indicator
                 $('.airbnb-analyzer-loading').hide();
                 
-                // Debug logging
-                console.log('AJAX Response:', response);
-                
                 if (response.success) {
-                    console.log('Response status:', response.data.status);
-                    
                     if (response.data.status === 'pending') {
                         // Show pending status message
-                        console.log('Showing pending message');
                         displayPendingMessage(response.data);
                     } else {
                         // Display results (for backward compatibility)
-                        console.log('Showing results');
                         displayResults(response.data);
                     }
                 } else {
                     // Show error message
-                    console.log('Error response:', response.data);
                     alert(response.data.message || 'An error occurred. Please try again.');
                     // Go back to step 1
                     $('#airbnb-analyzer-step-1').show();
@@ -100,8 +92,6 @@ jQuery(document).ready(function($) {
      * Display pending message for async processing
      */
     function displayPendingMessage(data) {
-        console.log('displayPendingMessage called with data:', data);
-        
         var html = '';
         
         html += '<div class="airbnb-analyzer-pending">';
@@ -134,25 +124,12 @@ jQuery(document).ready(function($) {
         html += '</div>';
         html += '</div>';
         
-        console.log('Generated HTML:', html);
-        
-        // Check if results container exists
+        // Set the HTML and show results container
         var resultsContainer = $('#airbnb-analyzer-results');
-        console.log('Results container found:', resultsContainer.length > 0);
-        console.log('Results container element:', resultsContainer);
-        
-        // Set the HTML
-        resultsContainer.html(html);
-        console.log('HTML set to results container');
-        
-        // Show results container
-        resultsContainer.show();
-        console.log('Results container shown');
-        console.log('Container is visible:', resultsContainer.is(':visible'));
+        resultsContainer.html(html).show();
         
         // Handle "Analyze Another" button
         $('#analyze-another').on('click', function() {
-            console.log('Analyze another button clicked');
             // Reset form
             $('#airbnb-listing-url').val('');
             $('#airbnb-analyzer-email').val('');

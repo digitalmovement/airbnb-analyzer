@@ -326,6 +326,8 @@ function brightdata_store_request($snapshot_id, $listing_url, $email) {
             email varchar(100) NOT NULL,
             status varchar(20) DEFAULT 'pending' NOT NULL,
             response_data longtext,
+            views int(11) DEFAULT 0,
+            last_viewed datetime NULL,
             date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
             date_completed datetime NULL,
             PRIMARY KEY  (id),
