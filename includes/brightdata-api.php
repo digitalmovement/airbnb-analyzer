@@ -33,8 +33,11 @@ function brightdata_trigger_scraping($listing_url, $email) {
         )
     );
     
+    // Get dataset ID from settings, with fallback to default
+    $dataset_id = get_option('airbnb_analyzer_brightdata_dataset_id', 'gd_ld7ll037kqy322v05');
+    
     $api_url = 'https://api.brightdata.com/datasets/v3/trigger';
-    $api_url .= '?dataset_id=gd_ld7ll037kqy322v05';
+    $api_url .= '?dataset_id=' . $dataset_id;
     $api_url .= '&notify=' . urlencode($notify_url);
     $api_url .= '&include_errors=true';
     

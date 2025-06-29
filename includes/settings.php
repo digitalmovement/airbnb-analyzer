@@ -26,6 +26,7 @@ add_action('admin_menu', 'airbnb_analyzer_add_settings_page');
 function airbnb_analyzer_register_settings() {
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_api_key');
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_dataset_id');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_site_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_secret_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_enable_debugging', array(
@@ -62,6 +63,13 @@ function airbnb_analyzer_settings_page() {
                     <td>
                         <input type="password" name="airbnb_analyzer_brightdata_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_api_key')); ?>" class="regular-text" />
                         <p class="description">Enter your Brightdata API key to fetch Airbnb listing data. Required for the analyzer to work.</p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Brightdata Dataset ID</th>
+                    <td>
+                        <input type="text" name="airbnb_analyzer_brightdata_dataset_id" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_dataset_id', 'gd_ld7ll037kqy322v05')); ?>" class="regular-text" />
+                        <p class="description">Brightdata dataset ID for Airbnb data collection. Default: gd_ld7ll037kqy322v05</p>
                     </td>
                 </tr>
                 <tr valign="top">
