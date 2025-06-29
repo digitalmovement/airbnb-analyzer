@@ -60,16 +60,24 @@ jQuery(document).ready(function($) {
                 // Hide loading indicator
                 $('.airbnb-analyzer-loading').hide();
                 
+                // Debug logging
+                console.log('AJAX Response:', response);
+                
                 if (response.success) {
+                    console.log('Response status:', response.data.status);
+                    
                     if (response.data.status === 'pending') {
                         // Show pending status message
+                        console.log('Showing pending message');
                         displayPendingMessage(response.data);
                     } else {
                         // Display results (for backward compatibility)
+                        console.log('Showing results');
                         displayResults(response.data);
                     }
                 } else {
                     // Show error message
+                    console.log('Error response:', response.data);
                     alert(response.data.message || 'An error occurred. Please try again.');
                     // Go back to step 1
                     $('#airbnb-analyzer-step-1').show();
@@ -92,6 +100,8 @@ jQuery(document).ready(function($) {
      * Display pending message for async processing
      */
     function displayPendingMessage(data) {
+        console.log('displayPendingMessage called with data:', data);
+        
         var html = '';
         
         html += '<div class="airbnb-analyzer-pending">';
@@ -103,8 +113,15 @@ jQuery(document).ready(function($) {
         html += '<ul>';
         html += '<li>Our system is now scraping your Airbnb listing data</li>';
         html += '<li>This process takes 1-2 minutes to complete</li>';
-        html += '<li>Once finished, we\'ll analyze your listing and send the results to your email</li>';
-        html += '<li>You can close this page - the analysis will continue in the background</li>';
+        
+        if (data.test_mode) {
+            html += '<li><strong>Test Mode Active:</strong> Email notifications are disabled. Check the WordPress admin dashboard for results.</li>';
+            html += '<li>To receive email notifications, disable test mode in the plugin settings</li>';
+        } else {
+            html += '<li>Once finished, we\'ll analyze your listing and send the results to your email</li>';
+            html += '<li>You can close this page - the analysis will continue in the background</li>';
+        }
+        
         html += '</ul>';
         html += '</div>';
         if (data.snapshot_id) {
@@ -117,18 +134,25 @@ jQuery(document).ready(function($) {
         html += '</div>';
         html += '</div>';
         
+        console.log('Generated HTML:', html);
+        
         // Set the HTML
         $('#airbnb-analyzer-results').html(html);
+        console.log('HTML set to results container');
         
         // Show results container
         $('#airbnb-analyzer-results').show();
+        console.log('Results container shown');
         
         // Handle "Analyze Another" button
         $('#analyze-another').on('click', function() {
+            console.log('Analyze another button clicked');
             // Reset form
             $('#airbnb-listing-url').val('');
             $('#airbnb-analyzer-email').val('');
-            grecaptcha.reset();
+            if (typeof grecaptcha !== 'undefined') {
+                grecaptcha.reset();
+            }
             
             // Hide results and show step 1
             $('#airbnb-analyzer-results').hide();

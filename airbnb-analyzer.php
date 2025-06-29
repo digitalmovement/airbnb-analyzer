@@ -126,11 +126,21 @@ function airbnb_analyzer_process_request() {
         wp_send_json_error(array('message' => $brightdata_result->get_error_message()));
     }
     
+    // Check if test mode is enabled
+    $test_mode = get_option('airbnb_analyzer_brightdata_test_mode', false);
+    
+    if ($test_mode) {
+        $message = 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. NOTE: Test mode is enabled, so email notifications are disabled. Please check the admin dashboard for results or disable test mode to receive email alerts.';
+    } else {
+        $message = 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. You will receive the results via email within 1-2 minutes.';
+    }
+    
     // Return success with pending status
     wp_send_json_success(array(
         'status' => 'pending',
-        'message' => 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. You will receive the results via email within 1-2 minutes.',
-        'snapshot_id' => $brightdata_result['snapshot_id']
+        'message' => $message,
+        'snapshot_id' => $brightdata_result['snapshot_id'],
+        'test_mode' => $test_mode
     ));
 }
 
