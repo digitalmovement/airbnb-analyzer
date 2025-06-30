@@ -20,10 +20,19 @@ if (!$request || $request->status !== 'completed') {
     wp_die('Analysis not found or not completed.');
 }
 
-// Get analysis data
-$response_data = maybe_unserialize($request->response_data);
+// Get analysis data - it's stored as JSON, not serialized
+$response_data = json_decode($request->response_data, true);
 $listing_data = isset($response_data['listing_data']) ? $response_data['listing_data'] : null;
 $analysis = isset($response_data['analysis']) ? $response_data['analysis'] : null;
+
+// Debug: Check if we have data
+if (empty($response_data)) {
+    wp_die('No analysis data found. Response data: ' . esc_html($request->response_data));
+}
+
+if (empty($listing_data)) {
+    wp_die('No listing data found. Available keys: ' . esc_html(implode(', ', array_keys($response_data ?: []))));
+}
 
 // Track view
 global $wpdb;
