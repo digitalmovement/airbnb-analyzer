@@ -314,48 +314,62 @@ function airbnb_analyzer_analyze_listing($listing_data) {
     // Initialize score
     $score = 0;
     
-    // Analyze title
-    $title_analysis = airbnb_analyzer_check_title($listing_data['title']);
+    // 1. Analyze title (using listing_title field)
+    $title = isset($listing_data['listing_title']) ? $listing_data['listing_title'] : $listing_data['title'];
+    $title_analysis = airbnb_analyzer_check_title($title);
     $analysis['recommendations'][] = $title_analysis;
     $score += $title_analysis['score'];
     
-    // Analyze description
-    $description_analysis = airbnb_analyzer_check_description($listing_data['description']);
-    $analysis['recommendations'][] = $description_analysis;
-    $score += $description_analysis['score'];
-    
-    // Analyze photos
-    $photos_analysis = airbnb_analyzer_check_photos($listing_data['photos']);
+    // 2. Analyze photos (stricter 4+ images requirement)
+    $photos_analysis = airbnb_analyzer_check_photos_enhanced($listing_data['photos']);
     $analysis['recommendations'][] = $photos_analysis;
     $score += $photos_analysis['score'];
     
-    // Analyze amenities
-    $amenities_analysis = analyze_amenities($listing_data['amenities']);
-    $analysis['recommendations'][] = $amenities_analysis;
-    $score += $amenities_analysis['score'];
-    
-    // Analyze reviews
-    $reviews_analysis = analyze_reviews($listing_data['rating'], $listing_data['review_count'], $listing_data['is_guest_favorite']);
+    // 3. Analyze reviews and ratings
+    $review_count = isset($listing_data['property_number_of_reviews']) ? $listing_data['property_number_of_reviews'] : $listing_data['review_count'];
+    $reviews_analysis = analyze_reviews_enhanced($listing_data['rating'], $review_count, $listing_data);
     $analysis['recommendations'][] = $reviews_analysis;
     $score += $reviews_analysis['score'];
     
-    // Analyze cancellation policy
-    $cancellation_analysis = analyze_cancellation_policy($listing_data['cancellation_policy_details'], $listing_data['property_type']);
-    $analysis['recommendations'][] = $cancellation_analysis;
-    $score += $cancellation_analysis['score'];
+    // 4. Check host status (superhost, guest favorite)
+    $host_analysis = analyze_host_status($listing_data);
+    $analysis['recommendations'][] = $host_analysis;
+    $score += $host_analysis['score'];
     
-    // Calculate final score
+    // 5. Analyze basic amenities
+    $basic_amenities_analysis = analyze_basic_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $basic_amenities_analysis;
+    $score += $basic_amenities_analysis['score'];
+    
+    // 6. Check heating and cooling
+    $climate_analysis = analyze_climate_control($listing_data['amenities']);
+    $analysis['recommendations'][] = $climate_analysis;
+    $score += $climate_analysis['score'];
+    
+    // 7. Check safety elements
+    $safety_analysis = analyze_safety_features($listing_data['amenities']);
+    $analysis['recommendations'][] = $safety_analysis;
+    $score += $safety_analysis['score'];
+    
+    // 8. Analyze description completeness
+    $description_analysis = airbnb_analyzer_check_description_enhanced($listing_data['description']);
+    $analysis['recommendations'][] = $description_analysis;
+    $score += $description_analysis['score'];
+    
+    // Calculate final score (Total possible: 120 points, capped at 100)
     $analysis['score'] = min(100, $score);
     
     // Generate summary based on score
-    if ($analysis['score'] >= 80) {
-        $analysis['summary'] = 'Excellent! Your listing is well-optimized for Airbnb.';
-    } elseif ($analysis['score'] >= 60) {
-        $analysis['summary'] = 'Good listing with some room for improvement.';
+    if ($analysis['score'] >= 85) {
+        $analysis['summary'] = 'Outstanding listing! Your property meets all key optimization criteria.';
+    } elseif ($analysis['score'] >= 70) {
+        $analysis['summary'] = 'Great listing with minor areas for improvement.';
+    } elseif ($analysis['score'] >= 55) {
+        $analysis['summary'] = 'Good foundation but several opportunities to boost your booking potential.';
     } elseif ($analysis['score'] >= 40) {
-        $analysis['summary'] = 'Average listing. Follow our recommendations to improve your visibility and bookings.';
+        $analysis['summary'] = 'Your listing needs attention in multiple areas to compete effectively.';
     } else {
-        $analysis['summary'] = 'Your listing needs significant improvements to perform well on Airbnb.';
+        $analysis['summary'] = 'Significant improvements needed to attract guests and increase bookings.';
     }
     
     return $analysis;
@@ -951,6 +965,523 @@ function analyze_cancellation_policy($policy_details, $property_type = '') {
     
     if (!$can_instant_book) {
         $result['recommendations'][] = "Enabling Instant Book can increase your booking rate by 12-15% according to Airbnb data.";
+    }
+    
+    return $result;
+}
+
+/**
+ * Enhanced photo analysis - stricter requirements
+ */
+function airbnb_analyzer_check_photos_enhanced($photos) {
+    $result = array(
+        'category' => 'Photos',
+        'score' => 0,
+        'max_score' => 15,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $photo_count = count($photos);
+    
+    if ($photo_count == 0) {
+        $result['message'] = 'No photos found!';
+        $result['score'] = 0;
+        $result['status'] = 'error';
+        $result['recommendations'][] = 'Add at least 8 high-quality photos of your property.';
+        $result['recommendations'][] = 'Include photos of every room, outdoor spaces, and neighborhood.';
+    } elseif ($photo_count < 4) {
+        $result['message'] = 'Critical: Too few photos - severely impacts bookings.';
+        $result['score'] = 2;
+        $result['status'] = 'error';
+        $result['recommendations'][] = 'You need at least 4 photos minimum. Aim for 8-15 photos total.';
+        $result['recommendations'][] = 'Photos are crucial - guests want to see what they\'re booking.';
+    } elseif ($photo_count < 6) {
+        $result['message'] = 'Below average photo count.';
+        $result['score'] = 6;
+        $result['status'] = 'warning';
+        $result['recommendations'][] = 'Add 2-4 more photos to reach the optimal range of 8-15 photos.';
+        $result['recommendations'][] = 'Include photos of all bedrooms, bathrooms, and common areas.';
+    } elseif ($photo_count < 10) {
+        $result['message'] = 'Good number of photos.';
+        $result['score'] = 12;
+        $result['status'] = 'good';
+        $result['recommendations'][] = 'Consider adding 2-3 more photos to showcase all property features.';
+    } else {
+        $result['message'] = 'Excellent photo coverage!';
+        $result['score'] = 15;
+        $result['status'] = 'excellent';
+    }
+    
+    return $result;
+}
+
+/**
+ * Enhanced reviews analysis
+ */
+function analyze_reviews_enhanced($rating, $review_count, $listing_data) {
+    $result = array(
+        'category' => 'Reviews & Ratings',
+        'score' => 0,
+        'max_score' => 20,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    // Analyze review count
+    $review_score = 0;
+    if ($review_count == 0) {
+        $result['message'] = 'No reviews yet - this significantly impacts bookings.';
+        $review_score = 0;
+        $result['recommendations'][] = 'Focus on getting your first 5 reviews by offering competitive pricing.';
+        $result['recommendations'][] = 'Ask guests to leave reviews after positive stays.';
+    } elseif ($review_count < 5) {
+        $result['message'] = 'Limited reviews - potential guests may hesitate to book.';
+        $review_score = 3;
+        $result['recommendations'][] = 'Work on getting more reviews to build trust with potential guests.';
+    } elseif ($review_count < 15) {
+        $result['message'] = 'Building a good review base.';
+        $review_score = 6;
+        $result['recommendations'][] = 'Continue providing excellent service to accumulate more reviews.';
+    } else {
+        $result['message'] = 'Strong review count builds guest confidence.';
+        $review_score = 10;
+    }
+    
+    // Analyze rating
+    $rating_score = 0;
+    if ($rating >= 4.8) {
+        $rating_score = 10;
+        $result['status'] = 'excellent';
+    } elseif ($rating >= 4.5) {
+        $rating_score = 8;
+        $result['status'] = 'good';
+    } elseif ($rating >= 4.0) {
+        $rating_score = 5;
+        $result['status'] = 'average';
+        $result['recommendations'][] = 'Focus on improving guest experience to boost ratings above 4.5.';
+    } elseif ($rating > 0) {
+        $rating_score = 2;
+        $result['status'] = 'poor';
+        $result['recommendations'][] = 'Critical: Low ratings hurt bookings. Address guest concerns immediately.';
+        $result['recommendations'][] = 'Focus on cleanliness, accuracy, and communication.';
+    }
+    
+    $result['score'] = $review_score + $rating_score;
+    
+    return $result;
+}
+
+/**
+ * Analyze host status and performance
+ */
+function analyze_host_status($listing_data) {
+    $result = array(
+        'category' => 'Host Performance',
+        'score' => 0,
+        'max_score' => 15,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $score = 0;
+    $status_items = array();
+    
+    // Check superhost status (5 points)
+    $is_superhost = isset($listing_data['is_supperhost']) ? $listing_data['is_supperhost'] : false;
+    if ($is_superhost) {
+        $score += 5;
+        $status_items[] = 'Superhost';
+    } else {
+        $result['recommendations'][] = 'Work towards Superhost status for increased visibility and trust.';
+    }
+    
+    // Check guest favorite (3 points)
+    $is_guest_favorite = isset($listing_data['is_guest_favorite']) ? $listing_data['is_guest_favorite'] : false;
+    if ($is_guest_favorite) {
+        $score += 3;
+        $status_items[] = 'Guest Favorite';
+    } else {
+        $result['recommendations'][] = 'Aim for Guest Favorite status by maintaining high ratings and reviews.';
+    }
+    
+    // Check host response rate (3 points)
+    $response_rate = isset($listing_data['host_response_rate']) ? intval($listing_data['host_response_rate']) : 0;
+    if ($response_rate >= 95) {
+        $score += 3;
+        $status_items[] = $response_rate . '% response rate';
+    } elseif ($response_rate >= 85) {
+        $score += 2;
+        $status_items[] = $response_rate . '% response rate';
+        $result['recommendations'][] = 'Improve response rate to 95%+ for better guest confidence.';
+    } elseif ($response_rate > 0) {
+        $score += 1;
+        $result['recommendations'][] = 'Critical: Low response rate (' . $response_rate . '%) hurts bookings significantly.';
+    } else {
+        $result['recommendations'][] = 'Set up automatic responses to improve response rate.';
+    }
+    
+    // Check host rating (2 points)
+    $host_rating = isset($listing_data['host_rating']) ? floatval($listing_data['host_rating']) : 0;
+    if ($host_rating >= 4.8) {
+        $score += 2;
+    } elseif ($host_rating >= 4.5) {
+        $score += 1;
+    } elseif ($host_rating > 0) {
+        $result['recommendations'][] = 'Focus on improving host rating through better communication and service.';
+    }
+    
+    // Check hosting experience (2 points)
+    $hosting_years = isset($listing_data['hosts_year']) ? intval($listing_data['hosts_year']) : 0;
+    if ($hosting_years >= 3) {
+        $score += 2;
+        $status_items[] = $hosting_years . ' years hosting';
+    } elseif ($hosting_years >= 1) {
+        $score += 1;
+        $status_items[] = $hosting_years . ' year' . ($hosting_years > 1 ? 's' : '') . ' hosting';
+    } else {
+        $result['recommendations'][] = 'New host - focus on building reviews and establishing trust.';
+    }
+    
+    $result['score'] = $score;
+    
+    // Generate status and message
+    if ($score >= 13) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Outstanding host profile: ' . implode(', ', $status_items);
+    } elseif ($score >= 10) {
+        $result['status'] = 'good';
+        $result['message'] = 'Strong host profile: ' . implode(', ', $status_items);
+    } elseif ($score >= 6) {
+        $result['status'] = 'average';
+        $result['message'] = 'Developing host profile: ' . implode(', ', $status_items);
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Host profile needs improvement' . (!empty($status_items) ? ': ' . implode(', ', $status_items) : '.');
+        $result['recommendations'][] = 'Focus on quick responses, clear communication, and exceeding guest expectations.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze basic amenities
+ */
+function analyze_basic_amenities($amenities) {
+    $result = array(
+        'category' => 'Essential Amenities',
+        'score' => 0,
+        'max_score' => 15,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $essential_amenities = array(
+        'WiFi' => array('Wifi', 'Wi-Fi', 'Internet', 'Wireless internet'),
+        'Kitchen' => array('Kitchen', 'Kitchenette'),
+        'Washing machine' => array('Washing machine', 'Washer'),
+        'Air conditioning' => array('Air conditioning', 'AC', 'Central air'),
+        'Heating' => array('Heating', 'Central heating'),
+        'Hot water' => array('Hot water'),
+        'Shampoo' => array('Shampoo', 'Hair care'),
+        'Iron' => array('Iron'),
+        'Hair dryer' => array('Hair dryer', 'Blow dryer'),
+        'TV' => array('TV', 'Television', 'Cable TV'),
+    );
+    
+    $found_amenities = array();
+    $missing_amenities = array();
+    
+    foreach ($essential_amenities as $essential => $variations) {
+        $found = false;
+        foreach ($variations as $variation) {
+            foreach ($amenities as $amenity) {
+                if (stripos($amenity, $variation) !== false) {
+                    $found = true;
+                    $found_amenities[] = $essential;
+                    break 2;
+                }
+            }
+        }
+        if (!$found) {
+            $missing_amenities[] = $essential;
+        }
+    }
+    
+    $found_count = count($found_amenities);
+    $total_essential = count($essential_amenities);
+    
+    $result['score'] = round(($found_count / $total_essential) * 15);
+    
+    if ($found_count >= 9) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent essential amenities coverage!';
+    } elseif ($found_count >= 7) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good coverage of essential amenities.';
+    } elseif ($found_count >= 5) {
+        $result['status'] = 'average';
+        $result['message'] = 'Missing some important amenities.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Many essential amenities are missing.';
+    }
+    
+    if (!empty($missing_amenities)) {
+        $result['recommendations'][] = 'Add these essential amenities: ' . implode(', ', array_slice($missing_amenities, 0, 5));
+        if (count($missing_amenities) > 5) {
+            $result['recommendations'][] = 'And ' . (count($missing_amenities) - 5) . ' more essential amenities.';
+        }
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze climate control
+ */
+function analyze_climate_control($amenities) {
+    $result = array(
+        'category' => 'Climate Control',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $heating_options = array('Heating', 'Central heating', 'Fireplace', 'Portable heater');
+    $cooling_options = array('Air conditioning', 'AC', 'Central air', 'Portable fan', 'Ceiling fan');
+    
+    $has_heating = false;
+    $has_cooling = false;
+    
+    foreach ($amenities as $amenity) {
+        foreach ($heating_options as $heating) {
+            if (stripos($amenity, $heating) !== false) {
+                $has_heating = true;
+                break;
+            }
+        }
+        foreach ($cooling_options as $cooling) {
+            if (stripos($amenity, $cooling) !== false) {
+                $has_cooling = true;
+                break;
+            }
+        }
+    }
+    
+    $score = 0;
+    if ($has_heating) $score += 5;
+    if ($has_cooling) $score += 5;
+    
+    $result['score'] = $score;
+    
+    if ($score >= 10) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Complete climate control - heating and cooling available.';
+    } elseif ($score >= 5) {
+        $result['status'] = 'average';
+        if ($has_heating && !$has_cooling) {
+            $result['message'] = 'Heating available but no cooling options.';
+            $result['recommendations'][] = 'Consider adding air conditioning or fans for guest comfort.';
+        } else {
+            $result['message'] = 'Cooling available but no heating options.';
+            $result['recommendations'][] = 'Consider adding heating for year-round comfort.';
+        }
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'No climate control amenities found.';
+        $result['recommendations'][] = 'Add heating and cooling options for guest comfort.';
+        $result['recommendations'][] = 'Basic fans and portable heaters can improve guest satisfaction.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze safety features
+ */
+function analyze_safety_features($amenities) {
+    $result = array(
+        'category' => 'Safety Features',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $has_smoke_detector = false;
+    $has_co_detector = false;
+    $has_first_aid = false;
+    $has_fire_extinguisher = false;
+    
+    foreach ($amenities as $amenity) {
+        if (stripos($amenity, 'SYSTEM_DETECTOR_SMOKE') !== false || 
+            stripos($amenity, 'smoke detector') !== false ||
+            stripos($amenity, 'smoke alarm') !== false) {
+            $has_smoke_detector = true;
+        }
+        if (stripos($amenity, 'SYSTEM_DETECTOR_CO') !== false || 
+            stripos($amenity, 'carbon monoxide') !== false ||
+            stripos($amenity, 'CO detector') !== false) {
+            $has_co_detector = true;
+        }
+        if (stripos($amenity, 'first aid') !== false) {
+            $has_first_aid = true;
+        }
+        if (stripos($amenity, 'fire extinguisher') !== false) {
+            $has_fire_extinguisher = true;
+        }
+    }
+    
+    $score = 0;
+    if ($has_smoke_detector) $score += 4;
+    if ($has_co_detector) $score += 4;
+    if ($has_first_aid) $score += 1;
+    if ($has_fire_extinguisher) $score += 1;
+    
+    $result['score'] = $score;
+    
+    if ($score >= 8) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent safety features - guests will feel secure.';
+    } elseif ($score >= 6) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good safety coverage with room for improvement.';
+    } elseif ($score >= 4) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic safety features present.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Critical safety features are missing.';
+    }
+    
+    if (!$has_smoke_detector) {
+        $result['recommendations'][] = 'CRITICAL: Install smoke detectors - required by most jurisdictions.';
+    }
+    if (!$has_co_detector) {
+        $result['recommendations'][] = 'CRITICAL: Install carbon monoxide detectors for guest safety.';
+    }
+    if (!$has_first_aid) {
+        $result['recommendations'][] = 'Provide a basic first aid kit for emergencies.';
+    }
+    if (!$has_fire_extinguisher) {
+        $result['recommendations'][] = 'Consider adding a fire extinguisher for additional safety.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Enhanced description analysis
+ */
+function airbnb_analyzer_check_description_enhanced($description) {
+    $result = array(
+        'category' => 'Description Completeness',
+        'score' => 0,
+        'max_score' => 15,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    if (empty($description)) {
+        $result['message'] = 'No description provided!';
+        $result['score'] = 0;
+        $result['recommendations'][] = 'Write a detailed description covering the space, guest access, and important notes.';
+        return $result;
+    }
+    
+    $description_lower = strtolower($description);
+    $length = strlen($description);
+    
+    // Check for key sections
+    $has_space_description = (
+        strpos($description_lower, 'the space') !== false ||
+        strpos($description_lower, 'apartment') !== false ||
+        strpos($description_lower, 'bedroom') !== false ||
+        strpos($description_lower, 'living room') !== false ||
+        strpos($description_lower, 'kitchen') !== false
+    );
+    
+    $has_guest_access = (
+        strpos($description_lower, 'guest access') !== false ||
+        strpos($description_lower, 'access') !== false ||
+        strpos($description_lower, 'entrance') !== false ||
+        strpos($description_lower, 'key') !== false
+    );
+    
+    $has_neighborhood_info = (
+        strpos($description_lower, 'neighborhood') !== false ||
+        strpos($description_lower, 'area') !== false ||
+        strpos($description_lower, 'location') !== false ||
+        strpos($description_lower, 'nearby') !== false
+    );
+    
+    $has_transport_info = (
+        strpos($description_lower, 'transport') !== false ||
+        strpos($description_lower, 'metro') !== false ||
+        strpos($description_lower, 'bus') !== false ||
+        strpos($description_lower, 'train') !== false ||
+        strpos($description_lower, 'parking') !== false
+    );
+    
+    // Score based on completeness
+    $score = 0;
+    
+    // Basic length check
+    if ($length >= 500) {
+        $score += 3;
+    } elseif ($length >= 300) {
+        $score += 2;
+    } elseif ($length >= 150) {
+        $score += 1;
+    }
+    
+    // Section completeness
+    if ($has_space_description) $score += 4;
+    if ($has_guest_access) $score += 3;
+    if ($has_neighborhood_info) $score += 3;
+    if ($has_transport_info) $score += 2;
+    
+    $result['score'] = min(15, $score);
+    
+    // Generate recommendations
+    if (!$has_space_description) {
+        $result['recommendations'][] = 'Describe "The Space" - rooms, layout, and key features.';
+    }
+    if (!$has_guest_access) {
+        $result['recommendations'][] = 'Add "Guest Access" section - how guests enter and what they can use.';
+    }
+    if (!$has_neighborhood_info) {
+        $result['recommendations'][] = 'Include neighborhood information and nearby attractions.';
+    }
+    if (!$has_transport_info) {
+        $result['recommendations'][] = 'Add transportation details - parking, public transport, etc.';
+    }
+    if ($length < 300) {
+        $result['recommendations'][] = 'Expand your description to at least 300 characters for better search visibility.';
+    }
+    
+    // Set status
+    if ($score >= 13) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Comprehensive description covering all key areas!';
+    } elseif ($score >= 10) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good description with minor gaps.';
+    } elseif ($score >= 6) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic description missing important sections.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Description needs significant improvement.';
     }
     
     return $result;
