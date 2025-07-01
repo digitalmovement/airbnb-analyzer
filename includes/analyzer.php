@@ -378,7 +378,7 @@ function airbnb_analyzer_analyze_listing($listing_data) {
     $score += $services_analysis['score'];
     
     // 8. Analyze description completeness
-    $description_analysis = airbnb_analyzer_check_description_enhanced($listing_data['description']);
+    $description_analysis = airbnb_analyzer_check_description_enhanced($listing_data);
     $analysis['recommendations'][] = $description_analysis;
     $score += $description_analysis['score'];
     
@@ -1366,7 +1366,172 @@ function analyze_safety_features($amenities) {
 /**
  * Enhanced description analysis
  */
-function airbnb_analyzer_check_description_enhanced($description) {
+function airbnb_analyzer_check_description_enhanced($listing_data) {
+    $result = array(
+        'category' => 'Description Completeness',
+        'score' => 0,
+        'max_score' => 20,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    // Check if we have the sectioned description data
+    $description_sections = isset($listing_data['description_by_sections']) ? $listing_data['description_by_sections'] : null;
+    $fallback_description = isset($listing_data['description']) ? $listing_data['description'] : '';
+    
+    if (empty($description_sections) && empty($fallback_description)) {
+        $result['message'] = 'No description provided!';
+        $result['score'] = 0;
+        $result['recommendations'][] = 'Write a detailed description covering the space, guest access, and important notes.';
+        return $result;
+    }
+    
+    // If we don't have sectioned data, fall back to basic analysis
+    if (empty($description_sections)) {
+        return airbnb_analyzer_check_description_basic($fallback_description);
+    }
+    
+    // Analyze each of the 4 standard sections
+    $sections_analysis = array(
+        'main_description' => array('found' => false, 'quality' => 0, 'length' => 0),
+        'the_space' => array('found' => false, 'quality' => 0, 'length' => 0),
+        'guest_access' => array('found' => false, 'quality' => 0, 'length' => 0),
+        'other_notes' => array('found' => false, 'quality' => 0, 'length' => 0)
+    );
+    
+    foreach ($description_sections as $section) {
+        $title = strtolower($section['title'] ?? '');
+        $value = trim($section['value'] ?? '');
+        $length = strlen($value);
+        
+        if (empty($value) || $length < 10) continue; // Skip empty or very short sections
+        
+        if (empty($title) || $title === 'null') {
+            // Main description (no title)
+            $sections_analysis['main_description']['found'] = true;
+            $sections_analysis['main_description']['length'] = $length;
+            $sections_analysis['main_description']['quality'] = analyze_section_quality($value, 'main');
+        } elseif (strpos($title, 'space') !== false) {
+            // The space section
+            $sections_analysis['the_space']['found'] = true;
+            $sections_analysis['the_space']['length'] = $length;
+            $sections_analysis['the_space']['quality'] = analyze_section_quality($value, 'space');
+        } elseif (strpos($title, 'access') !== false) {
+            // Guest access section
+            $sections_analysis['guest_access']['found'] = true;
+            $sections_analysis['guest_access']['length'] = $length;
+            $sections_analysis['guest_access']['quality'] = analyze_section_quality($value, 'access');
+        } elseif (strpos($title, 'note') !== false || strpos($title, 'other') !== false) {
+            // Other things to note section
+            $sections_analysis['other_notes']['found'] = true;
+            $sections_analysis['other_notes']['length'] = $length;
+            $sections_analysis['other_notes']['quality'] = analyze_section_quality($value, 'notes');
+        }
+    }
+    
+    // Calculate score based on sections (5 points each)
+    $score = 0;
+    foreach ($sections_analysis as $section_key => $section_data) {
+        if ($section_data['found']) {
+            $score += min(5, $section_data['quality']);
+        }
+    }
+    
+    $result['score'] = $score;
+    
+    // Generate specific recommendations for missing or weak sections
+    if (!$sections_analysis['main_description']['found']) {
+        $result['recommendations'][] = 'ADD MAIN DESCRIPTION: Write an engaging overview highlighting your property\'s best features and location benefits.';
+    } elseif ($sections_analysis['main_description']['quality'] < 3) {
+        $result['recommendations'][] = 'IMPROVE MAIN DESCRIPTION: Make it more compelling with key selling points, location benefits, and target guest appeal.';
+    }
+    
+    if (!$sections_analysis['the_space']['found']) {
+        $result['recommendations'][] = 'ADD "THE SPACE" SECTION: Describe room layout, furniture, amenities, and what makes your space special.';
+    } elseif ($sections_analysis['the_space']['quality'] < 3) {
+        $result['recommendations'][] = 'IMPROVE "THE SPACE" SECTION: Add more detail about rooms, layout, furnishings, and special features.';
+    }
+    
+    if (!$sections_analysis['guest_access']['found']) {
+        $result['recommendations'][] = 'ADD "GUEST ACCESS" SECTION: Clarify what spaces guests can use, any shared areas, and access instructions.';
+    } elseif ($sections_analysis['guest_access']['quality'] < 3) {
+        $result['recommendations'][] = 'IMPROVE "GUEST ACCESS" SECTION: Be more specific about what guests can access and any restrictions.';
+    }
+    
+    if (!$sections_analysis['other_notes']['found']) {
+        $result['recommendations'][] = 'ADD "OTHER THINGS TO NOTE" SECTION: Include house rules, important policies, neighborhood info, or special considerations.';
+    } elseif ($sections_analysis['other_notes']['quality'] < 3) {
+        $result['recommendations'][] = 'IMPROVE "OTHER NOTES" SECTION: Add more helpful information about rules, policies, or local area insights.';
+    }
+    
+    // Set status and message
+    $sections_found = count(array_filter($sections_analysis, function($s) { return $s['found']; }));
+    
+    if ($result['score'] >= 18) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Outstanding description with all 4 sections well-developed!';
+    } elseif ($result['score'] >= 14) {
+        $result['status'] = 'good';
+        $result['message'] = "Good description coverage ({$sections_found}/4 sections present).";
+    } elseif ($result['score'] >= 8) {
+        $result['status'] = 'average';
+        $result['message'] = "Basic description but missing key sections ({$sections_found}/4 sections present).";
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = "Description needs major improvement ({$sections_found}/4 sections present).";
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze the quality of a specific description section
+ */
+function analyze_section_quality($text, $section_type) {
+    $length = strlen($text);
+    $text_lower = strtolower($text);
+    $quality = 0;
+    
+    // Base score for having content
+    if ($length > 50) $quality += 1;
+    if ($length > 150) $quality += 1;
+    if ($length > 300) $quality += 1;
+    
+    // Content-specific quality checks
+    switch ($section_type) {
+        case 'main':
+            // Main description should be engaging and highlight key benefits
+            if (preg_match('/\b(luxury|modern|cozy|spacious|stunning|beautiful|perfect|ideal|convenient)\b/', $text_lower)) $quality += 1;
+            if (strpos($text_lower, 'location') !== false || strpos($text_lower, 'walk') !== false) $quality += 1;
+            break;
+            
+        case 'space':
+            // Space description should mention rooms and features
+            if (preg_match('/\b(bedroom|bathroom|kitchen|living|room|bed)\b/', $text_lower)) $quality += 1;
+            if (preg_match('/\b(balcony|garden|view|terrace|patio|amenities)\b/', $text_lower)) $quality += 1;
+            break;
+            
+        case 'access':
+            // Access should clarify what guests can use
+            if (preg_match('/\b(entire|private|shared|access|use)\b/', $text_lower)) $quality += 1;
+            if (strpos($text_lower, 'guest') !== false) $quality += 1;
+            break;
+            
+        case 'notes':
+            // Notes should have useful information
+            if (preg_match('/\b(rule|policy|note|important|check|key|parking)\b/', $text_lower)) $quality += 1;
+            if (preg_match('/\b(neighborhood|area|nearby|transport|restaurant|shop)\b/', $text_lower)) $quality += 1;
+            break;
+    }
+    
+    return min(5, $quality);
+}
+
+/**
+ * Fallback basic description analysis for non-sectioned descriptions
+ */
+function airbnb_analyzer_check_description_basic($description) {
     $result = array(
         'category' => 'Description Completeness',
         'score' => 0,
@@ -1378,7 +1543,6 @@ function airbnb_analyzer_check_description_enhanced($description) {
     
     if (empty($description)) {
         $result['message'] = 'No description provided!';
-        $result['score'] = 0;
         $result['recommendations'][] = 'Write a detailed description covering the space, guest access, and important notes.';
         return $result;
     }
@@ -1386,84 +1550,46 @@ function airbnb_analyzer_check_description_enhanced($description) {
     $description_lower = strtolower($description);
     $length = strlen($description);
     
-    // Check for key sections
-    $has_space_description = (
-        strpos($description_lower, 'the space') !== false ||
-        strpos($description_lower, 'apartment') !== false ||
-        strpos($description_lower, 'bedroom') !== false ||
-        strpos($description_lower, 'living room') !== false ||
-        strpos($description_lower, 'kitchen') !== false
-    );
+    // Check for key content areas
+    $has_space_description = preg_match('/\b(bedroom|bathroom|kitchen|living|room|space|apartment)\b/', $description_lower);
+    $has_location_info = preg_match('/\b(location|walk|nearby|transport|area|neighborhood)\b/', $description_lower);
+    $has_access_info = preg_match('/\b(access|entire|private|shared|guest)\b/', $description_lower);
+    $has_additional_info = preg_match('/\b(rule|policy|note|important|parking)\b/', $description_lower);
     
-    $has_guest_access = (
-        strpos($description_lower, 'guest access') !== false ||
-        strpos($description_lower, 'access') !== false ||
-        strpos($description_lower, 'entrance') !== false ||
-        strpos($description_lower, 'key') !== false
-    );
-    
-    $has_neighborhood_info = (
-        strpos($description_lower, 'neighborhood') !== false ||
-        strpos($description_lower, 'area') !== false ||
-        strpos($description_lower, 'location') !== false ||
-        strpos($description_lower, 'nearby') !== false
-    );
-    
-    $has_transport_info = (
-        strpos($description_lower, 'transport') !== false ||
-        strpos($description_lower, 'metro') !== false ||
-        strpos($description_lower, 'bus') !== false ||
-        strpos($description_lower, 'train') !== false ||
-        strpos($description_lower, 'parking') !== false
-    );
-    
-    // Score based on completeness
+    // Score based on content and length
     $score = 0;
-    
-    // Basic length check
-    if ($length >= 500) {
-        $score += 3;
-    } elseif ($length >= 300) {
-        $score += 2;
-    } elseif ($length >= 150) {
-        $score += 1;
-    }
-    
-    // Section completeness
-    if ($has_space_description) $score += 4;
-    if ($has_guest_access) $score += 3;
-    if ($has_neighborhood_info) $score += 3;
-    if ($has_transport_info) $score += 2;
+    if ($length > 100) $score += 3;
+    if ($length > 300) $score += 2;
+    if ($has_space_description) $score += 3;
+    if ($has_location_info) $score += 3;
+    if ($has_access_info) $score += 2;
+    if ($has_additional_info) $score += 2;
     
     $result['score'] = min(15, $score);
     
     // Generate recommendations
+    $result['recommendations'][] = 'Consider organizing your description into 4 sections: Main Description, The Space, Guest Access, and Other Things to Note.';
+    
     if (!$has_space_description) {
-        $result['recommendations'][] = 'Describe "The Space" - rooms, layout, and key features.';
+        $result['recommendations'][] = 'Add detailed space description: layout, rooms, amenities, and unique features.';
     }
-    if (!$has_guest_access) {
-        $result['recommendations'][] = 'Add "Guest Access" section - how guests enter and what they can use.';
+    if (!$has_location_info) {
+        $result['recommendations'][] = 'Include location benefits: nearby attractions, transport, restaurants.';
     }
-    if (!$has_neighborhood_info) {
-        $result['recommendations'][] = 'Include neighborhood information and nearby attractions.';
+    if (!$has_access_info) {
+        $result['recommendations'][] = 'Clarify guest access: what spaces guests can use and any restrictions.';
     }
-    if (!$has_transport_info) {
-        $result['recommendations'][] = 'Add transportation details - parking, public transport, etc.';
-    }
-    if ($length < 300) {
-        $result['recommendations'][] = 'Expand your description to at least 300 characters for better search visibility.';
+    if (!$has_additional_info) {
+        $result['recommendations'][] = 'Add important notes: house rules, policies, or special considerations.';
     }
     
     // Set status
-    if ($score >= 13) {
-        $result['status'] = 'excellent';
-        $result['message'] = 'Comprehensive description covering all key areas!';
-    } elseif ($score >= 10) {
+    if ($result['score'] >= 12) {
         $result['status'] = 'good';
-        $result['message'] = 'Good description with minor gaps.';
-    } elseif ($score >= 6) {
+        $result['message'] = 'Good description content but could benefit from better organization.';
+    } elseif ($result['score'] >= 8) {
         $result['status'] = 'average';
-        $result['message'] = 'Basic description missing important sections.';
+        $result['message'] = 'Basic description present but missing key information.';
     } else {
         $result['status'] = 'poor';
         $result['message'] = 'Description needs significant improvement.';

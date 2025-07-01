@@ -167,11 +167,36 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                     <small>Length: <?php echo strlen($title_to_show); ?> characters</small>
                 </div>
             <?php endif; ?>
-            <?php elseif (strpos($category_lower, 'description') !== false && !empty($listing_data['description'])): ?>
+            <?php elseif (strpos($category_lower, 'description') !== false): ?>
                 <div class="content-preview">
-                    <h4>Your Description:</h4>
-                    <p><?php echo esc_html(substr($listing_data['description'], 0, 300)); ?><?php echo strlen($listing_data['description']) > 300 ? '...' : ''; ?></p>
-                    <small>Length: <?php echo strlen($listing_data['description']); ?> characters</small>
+                    <h4>Description Sections:</h4>
+                    <?php 
+                    $description_sections = $listing_data['description_by_sections'] ?? null;
+                    $fallback_description = $listing_data['description'] ?? '';
+                    
+                    if (!empty($description_sections) && is_array($description_sections)): ?>
+                        <?php foreach ($description_sections as $section): ?>
+                            <?php 
+                            $title = $section['title'] ?? 'Main Description';
+                            $value = trim($section['value'] ?? '');
+                            if (empty($value) || strlen($value) < 10) continue;
+                            ?>
+                            <div style="margin-bottom: 15px; padding: 10px; background: #f9f9f9; border-radius: 5px;">
+                                <strong><?php echo esc_html($title === 'null' || empty($title) ? 'Main Description' : $title); ?>:</strong>
+                                <p style="margin: 5px 0 0 0; font-size: 0.9em;">
+                                    <?php echo esc_html(strlen($value) > 150 ? substr($value, 0, 150) . '...' : $value); ?>
+                                </p>
+                                <small style="color: #666;"><?php echo strlen($value); ?> characters</small>
+                            </div>
+                        <?php endforeach; ?>
+                        <small>Total sections: <?php echo count($description_sections); ?></small>
+                    <?php elseif (!empty($fallback_description)): ?>
+                        <p style="color: #ff9800;">⚠️ Using fallback description (sectioned data not available)</p>
+                        <p><?php echo esc_html(substr($fallback_description, 0, 300)); ?><?php echo strlen($fallback_description) > 300 ? '...' : ''; ?></p>
+                        <small>Length: <?php echo strlen($fallback_description); ?> characters</small>
+                    <?php else: ?>
+                        <p><em>No description data available</em></p>
+                    <?php endif; ?>
                 </div>
             <?php elseif (strpos($category_lower, 'photo') !== false): ?>
                 <?php 
