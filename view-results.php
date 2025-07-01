@@ -296,6 +296,49 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
         <?php endif; ?>
     </div>
 
+    <?php // ================== ADMIN DEBUG PANEL ================== ?>
+    <?php if ( current_user_can( 'manage_options' ) ) : ?>
+        <?php 
+        // Handle cache clear & regenerate action
+        if ( isset( $_GET['rebuild'] ) && $_GET['rebuild'] === '1' ) {
+            // Soft-reset the BrightData entry so a cron/async job can rebuild it
+            $wpdb->update(
+                $table_name,
+                array(
+                    'status'        => 'pending',
+                    'response_data' => null,
+                    'date_completed'=> null,
+                ),
+                array( 'snapshot_id' => $snapshot_id ),
+                array( '%s', '%s', '%s' ),
+                array( '%s' )
+            );
+            echo '<div style="margin:20px 0; padding:15px; border-left:4px solid #ff9800; background:#fff3e0;">⚠️ Cache cleared for this snapshot. It is now marked as <strong>pending</strong> and will be regenerated on the next analyzer run.</div>';
+        }
+        ?>
+        <div style="margin:40px 0; padding:25px; border-radius:12px; background:#f1f1f1;">
+            <h2 style="margin-top:0;">🔧 Admin Debug Panel</h2>
+            <p>You are seeing this because you have administrator capabilities (<code>manage_options</code>).</p>
+            <p>
+                <a href="<?php echo esc_url( add_query_arg( 'rebuild', '1' ) ); ?>" class="button button-danger" style="background:#d63638;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none;">⟳ Clear Cache &amp; Regenerate Report</a>
+            </p>
+
+            <details style="margin-top:20px;">
+                <summary style="cursor:pointer; font-weight:bold;">📄 View Raw JSON Response</summary>
+                <pre style="max-height:400px; overflow:auto; background:#000; color:#0f0; padding:15px; font-size:11px; line-height:1.4;">
+<?php echo esc_html( json_encode( $response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?>
+                </pre>
+            </details>
+
+            <details style="margin-top:20px;">
+                <summary style="cursor:pointer; font-weight:bold;">🗂️ View Parsed Analysis Array (after PHP processing)</summary>
+                <pre style="max-height:400px; overflow:auto; background:#000; color:#0ff; padding:15px; font-size:11px; line-height:1.4;">
+<?php echo esc_html( print_r( $analysis, true ) ); ?>
+                </pre>
+            </details>
+        </div>
+    <?php endif; ?>
+
     <div class="footer">
         <p>Analysis completed: <?php echo date('F j, Y', strtotime($request->date_created)); ?></p>
         <p>Reference: <?php echo esc_html($snapshot_id); ?></p>
