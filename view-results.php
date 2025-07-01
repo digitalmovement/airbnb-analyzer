@@ -108,7 +108,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
 
     <div class="content">
         <div class="listing-info">
-            <h2><?php echo esc_html($listing_data['listing_title'] ?? $listing_data['title'] ?? 'Unknown Listing'); ?></h2>
+            <h2><?php echo esc_html($listing_data['listing_title'] ?? $listing_data['name'] ?? $listing_data['title'] ?? 'Unknown Listing'); ?></h2>
             <p><strong>URL:</strong> <a href="<?php echo esc_url($request->listing_url); ?>" target="_blank"><?php echo esc_html($request->listing_url); ?></a></p>
             <?php if (!empty($listing_data['photos'][0])): ?>
             <img src="<?php echo esc_url($listing_data['photos'][0]); ?>" style="max-width: 100%; height: 300px; object-fit: cover; border-radius: 8px;">
@@ -236,14 +236,28 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                     <?php 
                     $amenity_list = [];
                     
-                    // Parse the amenities structure from JSON
+                    // Parse amenities: handle both nested (group->items) and flat arrays
                     if (!empty($listing_data['amenities']) && is_array($listing_data['amenities'])) {
-                        foreach ($listing_data['amenities'] as $amenity_group) {
-                            if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
-                                foreach ($amenity_group['items'] as $item) {
-                                    if (isset($item['name']) && !empty($item['name'])) {
-                                        $amenity_list[] = $item['name'];
+                        // Detect if first element has 'items' key (nested format)
+                        $first_element = $listing_data['amenities'][0] ?? null;
+                        if (is_array($first_element) && isset($first_element['items'])) {
+                            // Nested format
+                            foreach ($listing_data['amenities'] as $amenity_group) {
+                                if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
+                                    foreach ($amenity_group['items'] as $item) {
+                                        if (isset($item['name']) && !empty($item['name'])) {
+                                            $amenity_list[] = $item['name'];
+                                        }
                                     }
+                                }
+                            }
+                        } else {
+                            // Flat format: each element is either string or array with 'name'
+                            foreach ($listing_data['amenities'] as $amenity) {
+                                if (is_string($amenity)) {
+                                    $amenity_list[] = $amenity;
+                                } elseif (is_array($amenity) && isset($amenity['name'])) {
+                                    $amenity_list[] = $amenity['name'];
                                 }
                             }
                         }
