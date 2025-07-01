@@ -649,4 +649,3 @@ function airbnb_analyzer_debug_log($data, $label = '') {
     
     file_put_contents($log_file, $log_entry . PHP_EOL, FILE_APPEND);
 }
-?> 

@@ -68,4 +68,3 @@ function airbnb_analyzer_shortcode($atts) {
     // Return the buffered content
     return ob_get_clean();
 }
-?> 

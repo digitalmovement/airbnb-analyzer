@@ -438,4 +438,3 @@ function track_results_view($snapshot_id) {
         airbnb_analyzer_debug_log("Results page viewed for snapshot ID: $snapshot_id", 'Results View');
     }
 }
-?> 

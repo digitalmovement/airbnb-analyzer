@@ -420,4 +420,3 @@ function airbnb_analyzer_export_csv() {
 }
 
 // Note: The settings page function is defined in settings.php
-?> 
