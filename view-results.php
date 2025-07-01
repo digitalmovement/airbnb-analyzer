@@ -352,6 +352,12 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             <p>You are seeing this because you have administrator capabilities (<code>manage_options</code>).</p>
             <p>
                 <a href="<?php echo esc_url( add_query_arg( 'rebuild', '1' ) ); ?>" class="button button-danger" style="background:#d63638;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none;">⟳ Clear Cache &amp; Regenerate Report</a>
+                
+                <?php if ($request->status === 'pending'): ?>
+                    <br><br>
+                    <strong style="color: #ff9800;">⚠️ This report is currently pending processing.</strong><br>
+                    <small>Go to <a href="<?php echo admin_url('admin.php?page=airbnb-analyzer-stats'); ?>">Admin → Statistics</a> to process all pending requests, or wait for automatic processing.</small>
+                <?php endif; ?>
             </p>
 
             <details style="margin-top:20px;">

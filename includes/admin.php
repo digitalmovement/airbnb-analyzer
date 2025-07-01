@@ -134,6 +134,18 @@ function airbnb_analyzer_stats_page() {
     <div class="wrap">
         <h1>📊 Analysis Statistics Dashboard</h1>
         
+        <?php
+        // Display processing results if redirected from process pending action
+        if (isset($_GET['message'])) {
+            $message = urldecode($_GET['message']);
+            $processed = intval($_GET['processed'] ?? 0);
+            $errors = intval($_GET['errors'] ?? 0);
+            
+            $class = ($errors > 0) ? 'notice-warning' : 'notice-success';
+            echo '<div class="notice ' . $class . ' is-dismissible" style="margin: 20px 0;"><p>' . esc_html($message) . '</p></div>';
+        }
+        ?>
+        
         <div class="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
             <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
                 <h3 style="margin: 0; color: #666;">Total Requests</h3>
@@ -166,6 +178,23 @@ function airbnb_analyzer_stats_page() {
                 <small style="color: #666;"><?php echo $viewed_results; ?>/<?php echo $completed_requests; ?> viewed</small>
             </div>
         </div>
+        
+        <?php if ($pending_requests > 0): ?>
+        <div style="margin: 30px 0; padding: 20px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
+            <h2 style="margin: 0 0 15px 0;">⚠️ Process Pending Requests</h2>
+            <p>You have <strong><?php echo $pending_requests; ?></strong> pending request(s) that need processing. These may be from cache clears or incomplete analyses.</p>
+            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="margin: 15px 0;">
+                <input type="hidden" name="action" value="airbnb_analyzer_process_pending">
+                <?php wp_nonce_field('airbnb_analyzer_process_pending', 'process_pending_nonce'); ?>
+                <button type="submit" class="button button-primary" style="background: #ff9800; border-color: #ff9800;">
+                    🔄 Process All Pending Requests
+                </button>
+                <small style="display: block; margin-top: 8px; color: #666;">
+                    This will reanalyze existing BrightData responses without making new API calls.
+                </small>
+            </form>
+        </div>
+        <?php endif; ?>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
             <!-- Recent Completed Analyses -->
@@ -378,6 +407,9 @@ function airbnb_analyzer_export_page() {
 // Handle CSV export
 add_action('admin_post_airbnb_analyzer_export_csv', 'airbnb_analyzer_export_csv');
 
+// Handle processing pending requests
+add_action('admin_post_airbnb_analyzer_process_pending', 'airbnb_analyzer_process_pending_requests');
+
 function airbnb_analyzer_export_csv() {
     // Check permissions
     if (!current_user_can('manage_options')) {
@@ -416,6 +448,120 @@ function airbnb_analyzer_export_csv() {
     
     // Close the file pointer
     fclose($output);
+    exit;
+}
+
+/**
+ * Process all pending requests by reanalyzing existing BrightData responses
+ */
+function airbnb_analyzer_process_pending_requests() {
+    // Check permissions
+    if (!current_user_can('manage_options')) {
+        wp_die('You do not have sufficient permissions to access this page.');
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['process_pending_nonce']) || !wp_verify_nonce($_POST['process_pending_nonce'], 'airbnb_analyzer_process_pending')) {
+        wp_die('Invalid nonce. Please try again.');
+    }
+    
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    // Get all pending requests that have raw response data
+    $pending_requests = $wpdb->get_results(
+        "SELECT * FROM $table_name WHERE status = 'pending' AND raw_response_data IS NOT NULL ORDER BY date_created ASC"
+    );
+    
+    $processed_count = 0;
+    $error_count = 0;
+    $errors = array();
+    
+    foreach ($pending_requests as $request) {
+        try {
+            // Parse the raw BrightData response
+            $brightdata_response = json_decode($request->raw_response_data, true);
+            
+            if (empty($brightdata_response)) {
+                $error_count++;
+                $errors[] = "Snapshot {$request->snapshot_id}: No raw data available";
+                continue;
+            }
+            
+            // Convert Brightdata data to analyzer format
+            $listing_data = brightdata_format_for_analyzer($brightdata_response);
+            
+            if (empty($listing_data)) {
+                $error_count++;
+                $errors[] = "Snapshot {$request->snapshot_id}: Could not format listing data";
+                continue;
+            }
+            
+            // Analyze the listing
+            $analysis = null;
+            if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
+                $analysis = airbnb_analyzer_analyze_listing_with_claude($listing_data);
+            } else {
+                $analysis = airbnb_analyzer_analyze_listing($listing_data);
+            }
+            
+            // Update request status to completed
+            $updated = $wpdb->update(
+                $table_name,
+                array(
+                    'status' => 'completed',
+                    'response_data' => json_encode(array(
+                        'listing_data' => $listing_data,
+                        'analysis' => $analysis
+                    )),
+                    'date_completed' => current_time('mysql')
+                ),
+                array('snapshot_id' => $request->snapshot_id),
+                array('%s', '%s', '%s'),
+                array('%s')
+            );
+            
+            if ($updated !== false) {
+                $processed_count++;
+                
+                // Send updated analysis via email
+                if (function_exists('send_analysis_email')) {
+                    send_analysis_email($request->email, $request->listing_url, $analysis, null, $request->snapshot_id);
+                }
+            } else {
+                $error_count++;
+                $errors[] = "Snapshot {$request->snapshot_id}: Database update failed";
+            }
+            
+        } catch (Exception $e) {
+            $error_count++;
+            $errors[] = "Snapshot {$request->snapshot_id}: " . $e->getMessage();
+        }
+    }
+    
+    // Prepare success message
+    $message = "Processing complete! ";
+    if ($processed_count > 0) {
+        $message .= "Successfully processed {$processed_count} request(s). ";
+    }
+    if ($error_count > 0) {
+        $message .= "Failed to process {$error_count} request(s). ";
+    }
+    
+    // Add query args for the redirect
+    $redirect_url = add_query_arg(array(
+        'page' => 'airbnb-analyzer-stats',
+        'processed' => $processed_count,
+        'errors' => $error_count,
+        'message' => urlencode($message)
+    ), admin_url('admin.php'));
+    
+    // Log any errors
+    if (!empty($errors) && function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Pending request processing errors: " . implode('; ', $errors), 'Admin Process Pending');
+    }
+    
+    wp_redirect($redirect_url);
     exit;
 }
 
