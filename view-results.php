@@ -236,7 +236,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         $target_group = 'entertainment';
                     } elseif (strpos($category_lower, 'family') !== false) {
                         $target_group = 'family';
-                    } elseif (strpos($category_lower, 'climate') !== false || strpos($category_lower, 'heating') !== false) {
+                    } elseif (strpos($category_lower, 'climate') !== false || strpos($category_lower, 'heating') !== false || strpos($category_lower, 'cooling') !== false) {
                         $target_group = 'heating and cooling';
                     } elseif (strpos($category_lower, 'safety') !== false) {
                         $target_group = 'home safety';
@@ -246,7 +246,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         $target_group = 'kitchen and dining';
                     } elseif (strpos($category_lower, 'parking') !== false || strpos($category_lower, 'facilities') !== false) {
                         $target_group = 'parking and facilities';
-                    } elseif (strpos($category_lower, 'services') !== false) {
+                    } elseif (strpos($category_lower, 'guest services') !== false || strpos($category_lower, 'services') !== false) {
                         $target_group = 'services';
                     }
                     
@@ -295,15 +295,28 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         echo '<h4>Available Amenities:</h4>';
                     }
                     
+                    // Debug: Show what we're looking for (admin only)
+                    if (current_user_can('manage_options')) {
+                        echo '<small style="color:#666;font-style:italic;">Debug: Category="' . esc_html($section['category'] ?? 'N/A') . '", Target Group="' . esc_html($target_group) . '"</small><br>';
+                    }
+                    
                     if (!empty($amenity_list)): ?>
                         <div style="max-height: 150px; overflow-y: auto;">
                             <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
                             <small><?php echo count($amenity_list); ?> amenities in this category</small>
+                            
+                            <?php if (current_user_can('manage_options')): ?>
+                                <br><small style="color:#666;font-style:italic;">Debug amenities: <?php echo esc_html(implode(', ', array_slice($amenity_list, 0, 5))); ?><?php echo count($amenity_list) > 5 ? '...' : ''; ?></small>
+                            <?php endif; ?>
                         </div>
                     <?php else: ?>
                         <p><em>No amenities found in this category</em></p>
                         <?php if ($target_group): ?>
                             <small>Looking for amenities in: "<?php echo esc_html($target_group); ?>" group</small>
+                        <?php endif; ?>
+                        
+                        <?php if (current_user_can('manage_options')): ?>
+                            <br><small style="color:#666;font-style:italic;">Debug: No amenities found for target group "<?php echo esc_html($target_group); ?>"</small>
                         <?php endif; ?>
                     <?php endif; ?>
                 </div>
