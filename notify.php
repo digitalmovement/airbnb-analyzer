@@ -214,5 +214,7 @@ function send_analysis_email($email, $listing_url, $analysis = null, $error_mess
     wp_mail($email, $subject, $message);
 }
 
-// Handle the request
-handle_brightdata_notification();
+// Only handle the request if this file was called directly (not included from admin)
+if (!defined('AIRBNB_ANALYZER_ADMIN_CONTEXT')) {
+    handle_brightdata_notification();
+}

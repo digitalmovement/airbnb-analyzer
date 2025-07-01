@@ -24,8 +24,10 @@ require_once(AIRBNB_ANALYZER_PATH . 'includes/settings.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/claude-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/admin.php');
 
-// Include notify.php functions for admin processing
+// Include notify.php functions for admin processing (but don't execute the handler)
 if (is_admin()) {
+    // Define a flag to prevent automatic execution
+    define('AIRBNB_ANALYZER_ADMIN_CONTEXT', true);
     require_once(AIRBNB_ANALYZER_PATH . 'notify.php');
 }
 
