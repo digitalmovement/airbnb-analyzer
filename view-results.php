@@ -47,31 +47,55 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Airbnb Analysis Results</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f5f5f5; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f5f5f5; line-height: 1.6; }
         .container { max-width: 1200px; margin: 0 auto; background: white; min-height: 100vh; }
         .header { background: linear-gradient(135deg, #FF5A5F 0%, #FF3B41 100%); color: white; padding: 40px 30px; text-align: center; }
         .header h1 { margin: 0; font-size: 2.5em; font-weight: 300; }
         .content { padding: 30px; }
-        .listing-info { margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; }
-        .overall-score { background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center; }
+        .listing-info { margin-bottom: 30px; padding: 25px; background: #f8f9fa; border-radius: 12px; }
+        .overall-score { background: #e8f5e8; padding: 25px; border-radius: 12px; margin-bottom: 30px; text-align: center; }
         .score-circle { display: inline-block; width: 80px; height: 80px; border-radius: 50%; background: #4CAF50; color: white; line-height: 80px; font-size: 24px; font-weight: bold; margin-right: 20px; }
         .score-circle.low { background: #f44336; }
         .score-circle.medium { background: #ff9800; }
-        .analysis-section { margin: 30px 0; padding: 25px; background: #f9f9f9; border-radius: 12px; border-left: 5px solid #FF5A5F; }
-        .basic-analysis { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; border-left: 4px solid #2196F3; }
-        .claude-section { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; border-left: 4px solid #4CAF50; }
-        .rating-badge { display: inline-block; background: #4CAF50; color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; margin: 5px 0; }
-        .rating-badge.low { background: #f44336; }
-        .rating-badge.medium { background: #ff9800; }
+        
+        .navigation-index { background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
+        .navigation-index h3 { margin: 0 0 15px 0; color: #333; }
+        .nav-links { display: flex; flex-wrap: wrap; gap: 10px; }
+        .nav-link { background: #007cba; color: white; padding: 8px 16px; text-decoration: none; border-radius: 6px; font-size: 14px; transition: background 0.3s; }
+        .nav-link:hover { background: #005a87; color: white; }
+        
+        .analysis-item { margin: 40px 0; padding: 25px; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .analysis-item h3 { margin: 0 0 20px 0; color: #333; font-size: 1.4em; padding-bottom: 10px; border-bottom: 2px solid #eee; }
+        
+        .content-preview { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #007cba; }
+        .content-preview h4 { margin: 0 0 10px 0; color: #555; font-size: 1em; }
+        .photos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; }
+        .photo-item { border-radius: 8px; overflow: hidden; }
+        .photo-item img { width: 100%; height: 120px; object-fit: cover; }
+        
+        .rating-badge { display: inline-block; color: white; padding: 6px 12px; border-radius: 20px; font-weight: bold; margin: 10px 0; font-size: 14px; }
         .rating-badge.poor { background: #f44336; }
+        .rating-badge.error { background: #f44336; }
+        .rating-badge.warning { background: #ff9800; }
         .rating-badge.average { background: #ff9800; }
         .rating-badge.good { background: #4CAF50; }
+        .rating-badge.success { background: #4CAF50; }
         .rating-badge.excellent { background: #2e7d32; }
-        .suggestions { list-style: none; padding: 0; }
-        .suggestions li { background: #e3f2fd; padding: 10px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #2196f3; }
-        .suggestions li:before { content: "💡 "; }
-        .footer { background: #333; color: white; text-align: center; padding: 30px; }
+        
+        .recommendations { margin-top: 20px; }
+        .recommendations h4 { margin: 0 0 10px 0; color: #333; }
+        .suggestions { list-style: none; padding: 0; margin: 0; }
+        .suggestions li { background: #e3f2fd; padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #2196f3; }
+        .suggestions li:before { content: "💡 "; margin-right: 8px; }
+        
+        .footer { background: #333; color: white; text-align: center; padding: 30px; margin-top: 40px; }
         .btn { display: inline-block; background: #FF5A5F; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; }
+        
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+        
+        /* Section anchor offset for fixed navigation */
+        .analysis-item[id] { scroll-margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -79,7 +103,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
 <div class="container">
     <div class="header">
         <h1>🏠 Airbnb Analysis Results</h1>
-        <p>AI-powered listing optimization report</p>
+        <p>Comprehensive listing optimization report</p>
     </div>
 
     <div class="content">
@@ -108,147 +132,129 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
         <?php endif; ?>
 
         <?php if (isset($analysis['recommendations']) && is_array($analysis['recommendations'])): ?>
-        <div class="analysis-section">
-            <h2>📊 Detailed Analysis Results</h2>
-            
-            <?php foreach ($analysis['recommendations'] as $section): ?>
-            <?php if (is_array($section) && isset($section['category'])): ?>
-            <div class="basic-analysis">
-                <h3><?php echo esc_html($section['category']); ?></h3>
-                <div class="rating-badge <?php echo esc_attr($section['status'] ?? 'average'); ?>">
-                    Score: <?php echo esc_html($section['score'] ?? 'N/A'); ?>/<?php echo esc_html($section['max_score'] ?? '10'); ?>
-                </div>
-                <p><strong><?php echo esc_html($section['message'] ?? ''); ?></strong></p>
-                
-                <?php if (isset($section['recommendations']) && is_array($section['recommendations']) && !empty($section['recommendations'])): ?>
-                <div>
-                    <strong>Recommendations:</strong>
-                    <ul class="suggestions">
-                        <?php foreach ($section['recommendations'] as $rec): ?>
-                        <li><?php echo esc_html($rec); ?></li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
+        <div class="navigation-index">
+            <h3>📋 Analysis Sections</h3>
+            <div class="nav-links">
+                <?php foreach ($analysis['recommendations'] as $index => $section): ?>
+                <?php if (is_array($section) && isset($section['category'])): ?>
+                <a href="#section-<?php echo $index; ?>" class="nav-link"><?php echo esc_html($section['category']); ?></a>
                 <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <?php foreach ($analysis['recommendations'] as $index => $section): ?>
+        <?php if (is_array($section) && isset($section['category'])): ?>
+        <div class="analysis-item" id="section-<?php echo $index; ?>">
+            <h3><?php echo esc_html($section['category']); ?></h3>
+            
+            <div class="rating-badge <?php echo esc_attr($section['status'] ?? 'average'); ?>">
+                Score: <?php echo esc_html($section['score'] ?? 'N/A'); ?>/<?php echo esc_html($section['max_score'] ?? '10'); ?>
+            </div>
+
+            <?php
+            // Show the content being analyzed
+            $category_lower = strtolower($section['category'] ?? '');
+            
+            if (strpos($category_lower, 'title') !== false && !empty($listing_data['listing_title'])): ?>
+                <div class="content-preview">
+                    <h4>Your Title:</h4>
+                    <p><strong>"<?php echo esc_html($listing_data['listing_title']); ?>"</strong></p>
+                    <small>Length: <?php echo strlen($listing_data['listing_title']); ?> characters</small>
+                </div>
+            <?php elseif (strpos($category_lower, 'description') !== false && !empty($listing_data['description'])): ?>
+                <div class="content-preview">
+                    <h4>Your Description:</h4>
+                    <p><?php echo esc_html(substr($listing_data['description'], 0, 300)); ?><?php echo strlen($listing_data['description']) > 300 ? '...' : ''; ?></p>
+                    <small>Length: <?php echo strlen($listing_data['description']); ?> characters</small>
+                </div>
+            <?php elseif (strpos($category_lower, 'photo') !== false && !empty($listing_data['photos'])): ?>
+                <div class="content-preview">
+                    <h4>Your Photos (<?php echo count($listing_data['photos']); ?> total):</h4>
+                    <div class="photos-grid">
+                        <?php $photo_count = 0; ?>
+                        <?php foreach (array_slice($listing_data['photos'], 0, 6) as $photo): ?>
+                            <div class="photo-item">
+                                <img src="<?php echo esc_url($photo); ?>" alt="Listing photo">
+                            </div>
+                            <?php $photo_count++; ?>
+                        <?php endforeach; ?>
+                        <?php if (count($listing_data['photos']) > 6): ?>
+                            <div style="grid-column: span 2; text-align: center; padding: 20px; background: #f0f0f0; border-radius: 8px; color: #666;">
+                                +<?php echo count($listing_data['photos']) - 6; ?> more photos
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php elseif (strpos($category_lower, 'host') !== false): ?>
+                <div class="content-preview">
+                    <h4>Host Information:</h4>
+                    <?php if (!empty($listing_data['is_supperhost'])): ?>
+                        <p>✨ <strong>Superhost Status:</strong> <?php echo $listing_data['is_supperhost'] ? 'Yes' : 'No'; ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($listing_data['host_response_rate'])): ?>
+                        <p>📞 <strong>Response Rate:</strong> <?php echo esc_html($listing_data['host_response_rate']); ?>%</p>
+                    <?php endif; ?>
+                    <?php if (!empty($listing_data['hosts_year'])): ?>
+                        <p>📅 <strong>Hosting Experience:</strong> <?php echo esc_html($listing_data['hosts_year']); ?> years</p>
+                    <?php endif; ?>
+                    <?php if (!empty($listing_data['host_rating'])): ?>
+                        <p>⭐ <strong>Host Rating:</strong> <?php echo esc_html($listing_data['host_rating']); ?>/5</p>
+                    <?php endif; ?>
+                </div>
+            <?php elseif (strpos($category_lower, 'review') !== false): ?>
+                <div class="content-preview">
+                    <h4>Reviews Summary:</h4>
+                    <p>⭐ <strong>Rating:</strong> <?php echo esc_html($listing_data['ratings'] ?? $listing_data['rating'] ?? 'N/A'); ?>/5</p>
+                    <p>📝 <strong>Review Count:</strong> <?php echo esc_html($listing_data['property_number_of_reviews'] ?? 'N/A'); ?> reviews</p>
+                    <?php if (!empty($listing_data['is_guest_favorite'])): ?>
+                        <p>💖 <strong>Guest Favorite:</strong> <?php echo $listing_data['is_guest_favorite'] ? 'Yes' : 'No'; ?></p>
+                    <?php endif; ?>
+                </div>
+            <?php elseif (strpos($category_lower, 'amenities') !== false || strpos($category_lower, 'climate') !== false || strpos($category_lower, 'safety') !== false): ?>
+                <div class="content-preview">
+                    <h4>Available Amenities:</h4>
+                    <?php if (!empty($listing_data['amenities']) && is_array($listing_data['amenities'])): ?>
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            <?php 
+                            $amenity_list = [];
+                            foreach ($listing_data['amenities'] as $amenity_group) {
+                                if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
+                                    foreach ($amenity_group['items'] as $item) {
+                                        if (isset($item['name'])) {
+                                            $amenity_list[] = $item['name'];
+                                        }
+                                    }
+                                }
+                            }
+                            if (!empty($amenity_list)): ?>
+                                <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
+                                <small><?php echo count($amenity_list); ?> amenities total</small>
+                            <?php else: ?>
+                                <p>No amenities data available</p>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <p>No amenities data available</p>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <p><strong><?php echo esc_html($section['message'] ?? ''); ?></strong></p>
+            
+            <?php if (isset($section['recommendations']) && is_array($section['recommendations']) && !empty($section['recommendations'])): ?>
+            <div class="recommendations">
+                <h4>💡 Recommendations:</h4>
+                <ul class="suggestions">
+                    <?php foreach ($section['recommendations'] as $rec): ?>
+                    <li><?php echo esc_html($rec); ?></li>
+                    <?php endforeach; ?>
+                </ul>
             </div>
             <?php endif; ?>
-            <?php endforeach; ?>
         </div>
         <?php endif; ?>
-
-        <?php if (isset($analysis['claude_analysis'])): ?>
-        <div class="analysis-section">
-            <h2>🤖 AI Analysis</h2>
-            
-            <?php if (isset($analysis['claude_analysis']['title'])): ?>
-            <div class="claude-section">
-                <h3>📝 Title Analysis</h3>
-                <?php $title = $analysis['claude_analysis']['title']; $rating = intval($title['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><?php echo esc_html($title['feedback'] ?? ''); ?></p>
-                <?php if (!empty($title['alternative_titles'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($title['alternative_titles'] as $alt): ?>
-                    <li><?php echo esc_html($alt); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-
-            <?php if (isset($analysis['claude_analysis']['description'])): ?>
-            <div class="claude-section">
-                <h3>📄 Description Analysis</h3>
-                <?php $desc = $analysis['claude_analysis']['description']; $rating = intval($desc['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><strong>First Impression:</strong> <?php echo esc_html($desc['first_impression'] ?? ''); ?></p>
-                <p><strong>Overall:</strong> <?php echo esc_html($desc['overall_feedback'] ?? ''); ?></p>
-                <?php if (!empty($desc['suggestions'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($desc['suggestions'] as $suggestion): ?>
-                    <li><?php echo esc_html($suggestion); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-
-            <?php if (isset($analysis['claude_analysis']['host'])): ?>
-            <div class="claude-section">
-                <h3>👤 Host Profile Analysis</h3>
-                <?php $host = $analysis['claude_analysis']['host']; $rating = intval($host['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><?php echo esc_html($host['feedback'] ?? ''); ?></p>
-                <?php if (!empty($host['suggestions'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($host['suggestions'] as $suggestion): ?>
-                    <li><?php echo esc_html($suggestion); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-
-            <?php if (isset($analysis['claude_analysis']['amenities'])): ?>
-            <div class="claude-section">
-                <h3>🏠 Amenities Analysis</h3>
-                <?php $amenities = $analysis['claude_analysis']['amenities']; $rating = intval($amenities['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><?php echo esc_html($amenities['feedback'] ?? ''); ?></p>
-                <?php if (!empty($amenities['suggestions'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($amenities['suggestions'] as $suggestion): ?>
-                    <li><?php echo esc_html($suggestion); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-
-            <?php if (isset($analysis['claude_analysis']['reviews'])): ?>
-            <div class="claude-section">
-                <h3>⭐ Reviews Analysis</h3>
-                <?php $reviews = $analysis['claude_analysis']['reviews']; $rating = intval($reviews['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><?php echo esc_html($reviews['feedback'] ?? ''); ?></p>
-                <?php if (!empty($reviews['suggestions'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($reviews['suggestions'] as $suggestion): ?>
-                    <li><?php echo esc_html($suggestion); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-
-            <?php if (isset($analysis['claude_analysis']['cancellation'])): ?>
-            <div class="claude-section">
-                <h3>📋 Cancellation Policy Analysis</h3>
-                <?php $cancellation = $analysis['claude_analysis']['cancellation']; $rating = intval($cancellation['rating'] ?? 0); ?>
-                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
-                    Rating: <?php echo $rating; ?>/10
-                </div>
-                <p><?php echo esc_html($cancellation['feedback'] ?? ''); ?></p>
-                <?php if (!empty($cancellation['suggestions'])): ?>
-                <ul class="suggestions">
-                    <?php foreach ($cancellation['suggestions'] as $suggestion): ?>
-                    <li><?php echo esc_html($suggestion); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <?php endif; ?>
-        </div>
+        <?php endforeach; ?>
         <?php endif; ?>
     </div>
 
