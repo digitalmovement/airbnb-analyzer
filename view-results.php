@@ -267,6 +267,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                                                 $amenity_list[] = $item['name'];
                                             }
                                         }
+                                        break; // Found our target group, no need to continue
                                     } elseif (!$target_group) {
                                         // Show all amenities if no specific group
                                         foreach ($amenity_group['items'] as $item) {
@@ -279,12 +280,18 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                             }
                         } else {
                             // Flat format: each element is either string or array with 'name'
+                            // For flat format, we can't filter by group, so show all amenities
                             foreach ($listing_data['amenities'] as $amenity) {
                                 if (is_string($amenity)) {
                                     $amenity_list[] = $amenity;
                                 } elseif (is_array($amenity) && isset($amenity['name'])) {
                                     $amenity_list[] = $amenity['name'];
                                 }
+                            }
+                            
+                            // Show a warning for flat format when a specific group is requested
+                            if ($target_group && current_user_can('manage_options')) {
+                                echo '<small style="color:#ff9800;">⚠️ This report uses old flat amenity format - regenerate for proper categorization</small><br>';
                             }
                         }
                     }
@@ -295,28 +302,15 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         echo '<h4>Available Amenities:</h4>';
                     }
                     
-                    // Debug: Show what we're looking for (admin only)
-                    if (current_user_can('manage_options')) {
-                        echo '<small style="color:#666;font-style:italic;">Debug: Category="' . esc_html($section['category'] ?? 'N/A') . '", Target Group="' . esc_html($target_group) . '"</small><br>';
-                    }
-                    
                     if (!empty($amenity_list)): ?>
                         <div style="max-height: 150px; overflow-y: auto;">
                             <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
                             <small><?php echo count($amenity_list); ?> amenities in this category</small>
-                            
-                            <?php if (current_user_can('manage_options')): ?>
-                                <br><small style="color:#666;font-style:italic;">Debug amenities: <?php echo esc_html(implode(', ', array_slice($amenity_list, 0, 5))); ?><?php echo count($amenity_list) > 5 ? '...' : ''; ?></small>
-                            <?php endif; ?>
                         </div>
                     <?php else: ?>
                         <p><em>No amenities found in this category</em></p>
                         <?php if ($target_group): ?>
                             <small>Looking for amenities in: "<?php echo esc_html($target_group); ?>" group</small>
-                        <?php endif; ?>
-                        
-                        <?php if (current_user_can('manage_options')): ?>
-                            <br><small style="color:#666;font-style:italic;">Debug: No amenities found for target group "<?php echo esc_html($target_group); ?>"</small>
                         <?php endif; ?>
                     <?php endif; ?>
                 </div>

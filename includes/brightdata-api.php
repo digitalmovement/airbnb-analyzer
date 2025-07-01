@@ -202,18 +202,11 @@ function brightdata_format_for_analyzer($brightdata_data) {
         }
     }
     
-    // Extract amenities
+    // Extract amenities - preserve grouped structure for analysis functions
     $amenities = array();
     if (isset($listing['amenities']) && is_array($listing['amenities'])) {
-        foreach ($listing['amenities'] as $amenity_group) {
-            if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
-                foreach ($amenity_group['items'] as $amenity) {
-                    if (isset($amenity['name'])) {
-                        $amenities[] = $amenity['name'];
-                    }
-                }
-            }
-        }
+        // Keep the original grouped structure for proper categorization
+        $amenities = $listing['amenities'];
     }
     
     // Extract host info
