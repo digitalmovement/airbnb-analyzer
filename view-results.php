@@ -223,10 +223,33 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         <p>💖 <strong>Guest Favorite:</strong> <?php echo $listing_data['is_guest_favorite'] ? 'Yes' : 'No'; ?></p>
                     <?php endif; ?>
                 </div>
-            <?php elseif (strpos($category_lower, 'amenities') !== false || strpos($category_lower, 'climate') !== false || strpos($category_lower, 'safety') !== false): ?>
+            <?php elseif (strpos($category_lower, 'amenities') !== false || strpos($category_lower, 'climate') !== false || strpos($category_lower, 'safety') !== false || strpos($category_lower, 'bathroom') !== false || strpos($category_lower, 'bedroom') !== false || strpos($category_lower, 'entertainment') !== false || strpos($category_lower, 'family') !== false || strpos($category_lower, 'internet') !== false || strpos($category_lower, 'kitchen') !== false || strpos($category_lower, 'parking') !== false || strpos($category_lower, 'services') !== false): ?>
                 <div class="content-preview">
-                    <h4>Available Amenities:</h4>
                     <?php 
+                    // Determine which amenity group to show based on category
+                    $target_group = '';
+                    if (strpos($category_lower, 'bathroom') !== false) {
+                        $target_group = 'bathroom';
+                    } elseif (strpos($category_lower, 'bedroom') !== false || strpos($category_lower, 'laundry') !== false) {
+                        $target_group = 'bedroom and laundry';
+                    } elseif (strpos($category_lower, 'entertainment') !== false) {
+                        $target_group = 'entertainment';
+                    } elseif (strpos($category_lower, 'family') !== false) {
+                        $target_group = 'family';
+                    } elseif (strpos($category_lower, 'climate') !== false || strpos($category_lower, 'heating') !== false) {
+                        $target_group = 'heating and cooling';
+                    } elseif (strpos($category_lower, 'safety') !== false) {
+                        $target_group = 'home safety';
+                    } elseif (strpos($category_lower, 'internet') !== false || strpos($category_lower, 'office') !== false) {
+                        $target_group = 'internet and office';
+                    } elseif (strpos($category_lower, 'kitchen') !== false || strpos($category_lower, 'dining') !== false) {
+                        $target_group = 'kitchen and dining';
+                    } elseif (strpos($category_lower, 'parking') !== false || strpos($category_lower, 'facilities') !== false) {
+                        $target_group = 'parking and facilities';
+                    } elseif (strpos($category_lower, 'services') !== false) {
+                        $target_group = 'services';
+                    }
+                    
                     $amenity_list = [];
                     
                     // Parse amenities: handle both nested (group->items) and flat arrays
@@ -234,12 +257,22 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         // Detect if first element has 'items' key (nested format)
                         $first_element = $listing_data['amenities'][0] ?? null;
                         if (is_array($first_element) && isset($first_element['items'])) {
-                            // Nested format
+                            // Nested format - look for specific group
                             foreach ($listing_data['amenities'] as $amenity_group) {
-                                if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
-                                    foreach ($amenity_group['items'] as $item) {
-                                        if (isset($item['name']) && !empty($item['name'])) {
-                                            $amenity_list[] = $item['name'];
+                                if (isset($amenity_group['items']) && is_array($amenity_group['items']) && isset($amenity_group['group_name'])) {
+                                    // If we have a target group, only show that group's amenities
+                                    if ($target_group && strtolower($amenity_group['group_name']) === $target_group) {
+                                        foreach ($amenity_group['items'] as $item) {
+                                            if (isset($item['name']) && !empty($item['name'])) {
+                                                $amenity_list[] = $item['name'];
+                                            }
+                                        }
+                                    } elseif (!$target_group) {
+                                        // Show all amenities if no specific group
+                                        foreach ($amenity_group['items'] as $item) {
+                                            if (isset($item['name']) && !empty($item['name'])) {
+                                                $amenity_list[] = $item['name'];
+                                            }
                                         }
                                     }
                                 }
@@ -256,17 +289,22 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                         }
                     }
                     
+                    if ($target_group) {
+                        echo '<h4>' . ucwords($target_group) . ' Amenities:</h4>';
+                    } else {
+                        echo '<h4>Available Amenities:</h4>';
+                    }
+                    
                     if (!empty($amenity_list)): ?>
                         <div style="max-height: 150px; overflow-y: auto;">
                             <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
-                            <small><?php echo count($amenity_list); ?> amenities total</small>
+                            <small><?php echo count($amenity_list); ?> amenities in this category</small>
                         </div>
                     <?php else: ?>
-                        <p><em>No amenities found</em></p>
-                        <details style="margin-top: 10px;">
-                            <summary style="cursor: pointer; color: #666; font-size: 12px;">Debug: Raw amenities data</summary>
-                            <pre style="font-size: 10px; color: #999; max-height: 100px; overflow: auto;"><?php echo esc_html(print_r($listing_data['amenities'] ?? 'No amenities key', true)); ?></pre>
-                        </details>
+                        <p><em>No amenities found in this category</em></p>
+                        <?php if ($target_group): ?>
+                            <small>Looking for amenities in: "<?php echo esc_html($target_group); ?>" group</small>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>

@@ -336,28 +336,54 @@ function airbnb_analyzer_analyze_listing($listing_data) {
     $analysis['recommendations'][] = $host_analysis;
     $score += $host_analysis['score'];
     
-    // 5. Analyze basic amenities
-    $basic_amenities_analysis = analyze_basic_amenities($listing_data['amenities']);
-    $analysis['recommendations'][] = $basic_amenities_analysis;
-    $score += $basic_amenities_analysis['score'];
+    // 5. Analyze amenities by groups
+    $bathroom_analysis = analyze_bathroom_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $bathroom_analysis;
+    $score += $bathroom_analysis['score'];
     
-    // 6. Check heating and cooling
+    $bedroom_analysis = analyze_bedroom_laundry_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $bedroom_analysis;
+    $score += $bedroom_analysis['score'];
+    
+    $entertainment_analysis = analyze_entertainment_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $entertainment_analysis;
+    $score += $entertainment_analysis['score'];
+    
+    $family_analysis = analyze_family_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $family_analysis;
+    $score += $family_analysis['score'];
+    
     $climate_analysis = analyze_climate_control($listing_data['amenities']);
     $analysis['recommendations'][] = $climate_analysis;
     $score += $climate_analysis['score'];
     
-    // 7. Check safety elements
     $safety_analysis = analyze_safety_features($listing_data['amenities']);
     $analysis['recommendations'][] = $safety_analysis;
     $score += $safety_analysis['score'];
+    
+    $internet_analysis = analyze_internet_office_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $internet_analysis;
+    $score += $internet_analysis['score'];
+    
+    $kitchen_analysis = analyze_kitchen_dining_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $kitchen_analysis;
+    $score += $kitchen_analysis['score'];
+    
+    $parking_analysis = analyze_parking_facilities_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $parking_analysis;
+    $score += $parking_analysis['score'];
+    
+    $services_analysis = analyze_services_amenities($listing_data['amenities']);
+    $analysis['recommendations'][] = $services_analysis;
+    $score += $services_analysis['score'];
     
     // 8. Analyze description completeness
     $description_analysis = airbnb_analyzer_check_description_enhanced($listing_data['description']);
     $analysis['recommendations'][] = $description_analysis;
     $score += $description_analysis['score'];
     
-    // Calculate final score (Total possible: 120 points, capped at 100)
-    $analysis['score'] = min(100, $score);
+    // Calculate final score (Total possible: ~200 points, capped at 100)
+    $analysis['score'] = min(100, round($score * 0.6));
     
     // Generate summary based on score
     if ($analysis['score'] >= 85) {
@@ -1536,6 +1562,451 @@ function airbnb_analyzer_check_description_enhanced($description) {
     } else {
         $result['status'] = 'poor';
         $result['message'] = 'Description needs significant improvement.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze bathroom amenities
+ */
+function analyze_bathroom_amenities($amenities) {
+    $result = array(
+        'category' => 'Bathroom Amenities',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $bathroom_items = array();
+    $essential_bathroom = array('hot water', 'hair dryer', 'shampoo', 'body soap');
+    $found_essentials = 0;
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'bathroom') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $bathroom_items[] = $item['name'];
+                            $item_name = strtolower($item['name']);
+                            
+                            foreach ($essential_bathroom as $essential) {
+                                if (stripos($item_name, $essential) !== false) {
+                                    $found_essentials++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(10, $found_essentials * 2 + count($bathroom_items));
+    
+    if ($result['score'] >= 8) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent bathroom amenities - guests will be comfortable!';
+    } elseif ($result['score'] >= 6) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good bathroom amenities with room for improvement.';
+    } elseif ($result['score'] >= 3) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic bathroom amenities present.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Bathroom amenities need attention.';
+    }
+    
+    if ($found_essentials < 3) {
+        $result['recommendations'][] = 'Add essential bathroom items: hot water, hair dryer, shampoo, body soap.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze bedroom and laundry amenities
+ */
+function analyze_bedroom_laundry_amenities($amenities) {
+    $result = array(
+        'category' => 'Bedroom & Laundry',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $bedroom_items = array();
+    $has_washer = false;
+    $has_essentials = false;
+    $has_iron = false;
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'bedroom and laundry') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $bedroom_items[] = $item['name'];
+                            $item_name = strtolower($item['name']);
+                            
+                            if (stripos($item_name, 'washing machine') !== false) {
+                                $has_washer = true;
+                            }
+                            if (stripos($item_name, 'essentials') !== false) {
+                                $has_essentials = true;
+                            }
+                            if (stripos($item_name, 'iron') !== false) {
+                                $has_iron = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $score = 0;
+    if ($has_washer) $score += 4;
+    if ($has_essentials) $score += 4;
+    if ($has_iron) $score += 2;
+    
+    $result['score'] = $score;
+    
+    if ($score >= 8) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent bedroom and laundry amenities!';
+    } elseif ($score >= 6) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good bedroom amenities.';
+    } elseif ($score >= 3) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic bedroom amenities.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Bedroom amenities need improvement.';
+    }
+    
+    if (!$has_washer) {
+        $result['recommendations'][] = 'Add washing machine access for guest convenience.';
+    }
+    if (!$has_essentials) {
+        $result['recommendations'][] = 'Provide essentials: towels, bed sheets, soap, toilet paper.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze entertainment amenities
+ */
+function analyze_entertainment_amenities($amenities) {
+    $result = array(
+        'category' => 'Entertainment',
+        'score' => 0,
+        'max_score' => 8,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $entertainment_items = array();
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'entertainment') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $entertainment_items[] = $item['name'];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(8, count($entertainment_items) * 4);
+    
+    if ($result['score'] >= 6) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Great entertainment options for guests!';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good entertainment amenities.';
+    } elseif ($result['score'] >= 2) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic entertainment available.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'No entertainment amenities found.';
+        $result['recommendations'][] = 'Add entertainment options like TV, streaming services, or games.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze family amenities
+ */
+function analyze_family_amenities($amenities) {
+    $result = array(
+        'category' => 'Family-Friendly',
+        'score' => 0,
+        'max_score' => 6,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $family_items = array();
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'family') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $family_items[] = $item['name'];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(6, count($family_items) * 3);
+    
+    if ($result['score'] >= 5) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent family-friendly amenities!';
+    } elseif ($result['score'] >= 3) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good family amenities.';
+    } elseif ($result['score'] >= 1) {
+        $result['status'] = 'average';
+        $result['message'] = 'Some family amenities available.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'No family-specific amenities found.';
+        $result['recommendations'][] = 'Consider adding family amenities like board games, books, or child-friendly items.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze internet and office amenities
+ */
+function analyze_internet_office_amenities($amenities) {
+    $result = array(
+        'category' => 'Internet & Office',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $office_items = array();
+    $has_wifi = false;
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'internet and office') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $office_items[] = $item['name'];
+                            if (stripos($item['name'], 'wifi') !== false) {
+                                $has_wifi = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = $has_wifi ? 10 : 0;
+    
+    if ($has_wifi) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'WiFi available - essential for modern guests!';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'WiFi is missing - this is essential!';
+        $result['recommendations'][] = 'CRITICAL: Add WiFi - this is expected by virtually all guests.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze kitchen and dining amenities
+ */
+function analyze_kitchen_dining_amenities($amenities) {
+    $result = array(
+        'category' => 'Kitchen & Dining',
+        'score' => 0,
+        'max_score' => 15,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $kitchen_items = array();
+    $essential_kitchen = array('kitchen', 'fridge', 'microwave');
+    $found_essentials = 0;
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'kitchen and dining') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $kitchen_items[] = $item['name'];
+                            $item_name = strtolower($item['name']);
+                            
+                            foreach ($essential_kitchen as $essential) {
+                                if (stripos($item_name, $essential) !== false) {
+                                    $found_essentials++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(15, $found_essentials * 3 + count($kitchen_items));
+    
+    if ($result['score'] >= 12) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent kitchen facilities - guests can cook comfortably!';
+    } elseif ($result['score'] >= 8) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good kitchen amenities.';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic kitchen facilities available.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Kitchen facilities need improvement.';
+    }
+    
+    if ($found_essentials < 2) {
+        $result['recommendations'][] = 'Add essential kitchen items: full kitchen access, fridge, microwave.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze parking and facilities amenities
+ */
+function analyze_parking_facilities_amenities($amenities) {
+    $result = array(
+        'category' => 'Parking & Facilities',
+        'score' => 0,
+        'max_score' => 8,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $facility_items = array();
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'parking and facilities') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $facility_items[] = $item['name'];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(8, count($facility_items) * 4);
+    
+    if ($result['score'] >= 6) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Great parking and facility access!';
+    } elseif ($result['score'] >= 4) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good facility amenities.';
+    } elseif ($result['score'] >= 2) {
+        $result['status'] = 'average';
+        $result['message'] = 'Some facilities available.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'No parking or facility information found.';
+        $result['recommendations'][] = 'Consider mentioning parking options or building facilities like elevator access.';
+    }
+    
+    return $result;
+}
+
+/**
+ * Analyze services amenities
+ */
+function analyze_services_amenities($amenities) {
+    $result = array(
+        'category' => 'Guest Services',
+        'score' => 0,
+        'max_score' => 10,
+        'status' => 'poor',
+        'message' => '',
+        'recommendations' => array(),
+    );
+    
+    $service_items = array();
+    $has_self_checkin = false;
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                if (strtolower($amenity_group['group_name']) === 'services') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $service_items[] = $item['name'];
+                            if (stripos($item['name'], 'self check-in') !== false) {
+                                $has_self_checkin = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(10, count($service_items) * 3 + ($has_self_checkin ? 4 : 0));
+    
+    if ($result['score'] >= 8) {
+        $result['status'] = 'excellent';
+        $result['message'] = 'Excellent guest services - convenient and flexible!';
+    } elseif ($result['score'] >= 5) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good guest services.';
+    } elseif ($result['score'] >= 2) {
+        $result['status'] = 'average';
+        $result['message'] = 'Basic services available.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'No guest services found.';
+        $result['recommendations'][] = 'Consider adding self check-in or other convenient guest services.';
     }
     
     return $result;
