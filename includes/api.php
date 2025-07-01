@@ -124,4 +124,3 @@ function construct_airbnb_api_url($listing_id) {
     
     return $url;
 }
-?>

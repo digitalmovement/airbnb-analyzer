@@ -40,7 +40,48 @@ function airbnb_analyzer_activate() {
         wp_die('This plugin requires WordPress 4.7 or higher.');
     }
     
-    // Other activation tasks if needed
+    // Create database tables
+    airbnb_analyzer_create_tables();
+}
+
+/**
+ * Create database tables
+ */
+function airbnb_analyzer_create_tables() {
+    global $wpdb;
+    
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // Create emails table
+    $emails_table = $wpdb->prefix . 'airbnb_analyzer_emails';
+    $sql1 = "CREATE TABLE $emails_table (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        email varchar(100) NOT NULL,
+        listing_url text NOT NULL,
+        date_added datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        PRIMARY KEY  (id)
+    ) $charset_collate;";
+    dbDelta($sql1);
+    
+    // Create brightdata requests table
+    $requests_table = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    $sql2 = "CREATE TABLE $requests_table (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        snapshot_id varchar(100) NOT NULL,
+        listing_url text NOT NULL,
+        email varchar(100) NOT NULL,
+        status varchar(20) DEFAULT 'pending' NOT NULL,
+        response_data longtext,
+        raw_response_data longtext,
+        views int(11) DEFAULT 0,
+        last_viewed datetime NULL,
+        date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        date_completed datetime NULL,
+        PRIMARY KEY  (id),
+        UNIQUE KEY snapshot_id (snapshot_id)
+    ) $charset_collate;";
+    dbDelta($sql2);
 }
 
 // Register deactivation hook
@@ -152,22 +193,6 @@ function airbnb_analyzer_store_email($email, $listing_url) {
     
     $table_name = $wpdb->prefix . 'airbnb_analyzer_emails';
     
-    // Create table if it doesn't exist
-    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            email varchar(100) NOT NULL,
-            listing_url text NOT NULL,
-            date_added datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-            PRIMARY KEY  (id)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-    }
-    
     // Insert email into database
     $wpdb->insert(
         $table_name,
@@ -179,4 +204,3 @@ function airbnb_analyzer_store_email($email, $listing_url) {
 }
 
 // Note: The register_settings function is now in includes/settings.php
-?> 

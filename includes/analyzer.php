@@ -1486,4 +1486,3 @@ function airbnb_analyzer_check_description_enhanced($description) {
     
     return $result;
 }
-?> 

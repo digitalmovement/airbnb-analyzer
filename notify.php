@@ -216,4 +216,3 @@ function send_analysis_email($email, $listing_url, $analysis = null, $error_mess
 
 // Handle the request
 handle_brightdata_notification();
-?> 

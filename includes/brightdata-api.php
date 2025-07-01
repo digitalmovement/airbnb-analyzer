@@ -315,34 +315,10 @@ function brightdata_store_request($snapshot_id, $listing_url, $email) {
     
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
     
-    // Create table if it doesn't exist
-    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE $table_name (
-            id mediumint(9) NOT NULL AUTO_INCREMENT,
-            snapshot_id varchar(100) NOT NULL,
-            listing_url text NOT NULL,
-            email varchar(100) NOT NULL,
-            status varchar(20) DEFAULT 'pending' NOT NULL,
-            response_data longtext,
-            raw_response_data longtext,
-            views int(11) DEFAULT 0,
-            last_viewed datetime NULL,
-            date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-            date_completed datetime NULL,
-            PRIMARY KEY  (id),
-            UNIQUE KEY snapshot_id (snapshot_id)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-    } else {
-        // Check if raw_response_data column exists, if not add it
-        $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'raw_response_data'");
-        if (empty($column_exists)) {
-            $wpdb->query("ALTER TABLE $table_name ADD COLUMN raw_response_data longtext AFTER response_data");
-        }
+    // Check if raw_response_data column exists, if not add it (for existing installations)
+    $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'raw_response_data'");
+    if (empty($column_exists)) {
+        $wpdb->query("ALTER TABLE $table_name ADD COLUMN raw_response_data longtext AFTER response_data");
     }
     
     // Insert request into database
@@ -398,4 +374,3 @@ function brightdata_get_request($snapshot_id) {
         $snapshot_id
     ));
 }
-?> 
