@@ -272,7 +272,7 @@ function brightdata_format_for_analyzer($brightdata_data) {
     // Format data for analyzer
     $listing_data = array(
         'id' => isset($listing['property_id']) ? $listing['property_id'] : '',
-        'title' => isset($listing['name']) ? $listing['name'] : (isset($listing['listing_title']) ? $listing['listing_title'] : ''),
+        'title' => isset($listing['listing_title']) ? $listing['listing_title'] : '',
         'description' => isset($listing['description']) ? $listing['description'] : '',
         'photos' => isset($listing['images']) ? $listing['images'] : array(),
         'price' => isset($listing['price']) ? floatval($listing['price']) : 0,

@@ -157,15 +157,8 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             $category_lower = strtolower($section['category'] ?? '');
             
             if (strpos($category_lower, 'title') !== false): 
-                // Prioritize listing_title field, then fallback to others
-                $title_to_show = '';
-                if (!empty($listing_data['listing_title'])) {
-                    $title_to_show = $listing_data['listing_title'];
-                } elseif (!empty($listing_data['title'])) {
-                    $title_to_show = $listing_data['title'];
-                } elseif (!empty($listing_data['name'])) {
-                    $title_to_show = $listing_data['name'];
-                }
+                // Use only listing_title field as specified
+                $title_to_show = $listing_data['title'] ?? '';
                 
                 if (!empty($title_to_show)): ?>
                 <div class="content-preview">

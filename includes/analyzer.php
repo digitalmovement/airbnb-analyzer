@@ -1181,34 +1181,57 @@ function analyze_basic_amenities($amenities) {
     );
     
     $essential_amenities = array(
-        'WiFi' => array('Wifi', 'Wi-Fi', 'Internet', 'Wireless internet'),
-        'Kitchen' => array('Kitchen', 'Kitchenette'),
-        'Washing machine' => array('Washing machine', 'Washer'),
-        'Air conditioning' => array('Air conditioning', 'AC', 'Central air'),
-        'Heating' => array('Heating', 'Central heating'),
-        'Hot water' => array('Hot water'),
-        'Shampoo' => array('Shampoo', 'Hair care'),
-        'Iron' => array('Iron'),
-        'Hair dryer' => array('Hair dryer', 'Blow dryer'),
-        'TV' => array('TV', 'Television', 'Cable TV'),
+        'wifi' => false,
+        'kitchen' => false,
+        'washer' => false,
+        'tv' => false,
+        'parking' => false,
     );
+    
+    // Look for essential amenities across relevant groups
+    $essential_groups = array('internet and office', 'kitchen and dining', 'bathroom', 'entertainment', 'parking and facilities');
+    
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                $group_name = strtolower($amenity_group['group_name']);
+                
+                // Check relevant groups for essential amenities
+                if (in_array($group_name, $essential_groups) || strpos($group_name, 'basic') !== false) {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name'])) {
+                            $amenity_name = strtolower($item['name']);
+                            
+                            if (stripos($amenity_name, 'wifi') !== false || stripos($amenity_name, 'internet') !== false) {
+                                $essential_amenities['wifi'] = true;
+                            }
+                            if (stripos($amenity_name, 'kitchen') !== false || stripos($amenity_name, 'cooking') !== false) {
+                                $essential_amenities['kitchen'] = true;
+                            }
+                            if (stripos($amenity_name, 'washer') !== false || stripos($amenity_name, 'washing machine') !== false) {
+                                $essential_amenities['washer'] = true;
+                            }
+                            if (stripos($amenity_name, 'tv') !== false || stripos($amenity_name, 'television') !== false) {
+                                $essential_amenities['tv'] = true;
+                            }
+                            if (stripos($amenity_name, 'parking') !== false || stripos($amenity_name, 'garage') !== false) {
+                                $essential_amenities['parking'] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     
     $found_amenities = array();
     $missing_amenities = array();
     
-    foreach ($essential_amenities as $essential => $variations) {
-        $found = false;
-        foreach ($variations as $variation) {
-            foreach ($amenities as $amenity) {
-                if (stripos($amenity, $variation) !== false) {
-                    $found = true;
-                    $found_amenities[] = $essential;
-                    break 2;
-                }
-            }
-        }
-        if (!$found) {
-            $missing_amenities[] = $essential;
+    foreach ($essential_amenities as $amenity => $found) {
+        if ($found) {
+            $found_amenities[] = ucfirst($amenity);
+        } else {
+            $missing_amenities[] = ucfirst($amenity);
         }
     }
     
@@ -1254,23 +1277,41 @@ function analyze_climate_control($amenities) {
         'recommendations' => array(),
     );
     
-    $heating_options = array('Heating', 'Central heating', 'Fireplace', 'Portable heater');
-    $cooling_options = array('Air conditioning', 'AC', 'Central air', 'Portable fan', 'Ceiling fan');
-    
     $has_heating = false;
     $has_cooling = false;
     
-    foreach ($amenities as $amenity) {
-        foreach ($heating_options as $heating) {
-            if (stripos($amenity, $heating) !== false) {
-                $has_heating = true;
-                break;
-            }
-        }
-        foreach ($cooling_options as $cooling) {
-            if (stripos($amenity, $cooling) !== false) {
-                $has_cooling = true;
-                break;
+    // Look specifically in "Heating and cooling" group
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                $group_name = $amenity_group['group_name'];
+                
+                // Only check "Heating and cooling" group for climate features
+                if (strtolower($group_name) === 'heating and cooling') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['value']) && isset($item['name'])) {
+                            $value = $item['value'];
+                            $name = strtolower($item['name']);
+                            
+                            // Check for heating
+                            if (stripos($name, 'heating') !== false || 
+                                stripos($name, 'radiant heating') !== false ||
+                                stripos($name, 'central heating') !== false ||
+                                stripos($name, 'fireplace') !== false) {
+                                $has_heating = true;
+                            }
+                            
+                            // Check for cooling
+                            if (stripos($name, 'air conditioning') !== false || 
+                                stripos($name, 'ac') !== false ||
+                                stripos($name, 'central air') !== false ||
+                                stripos($name, 'fan') !== false ||
+                                stripos($name, 'cooling') !== false) {
+                                $has_cooling = true;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1321,22 +1362,35 @@ function analyze_safety_features($amenities) {
     $has_first_aid = false;
     $has_fire_extinguisher = false;
     
-    foreach ($amenities as $amenity) {
-        if (stripos($amenity, 'SYSTEM_DETECTOR_SMOKE') !== false || 
-            stripos($amenity, 'smoke detector') !== false ||
-            stripos($amenity, 'smoke alarm') !== false) {
-            $has_smoke_detector = true;
-        }
-        if (stripos($amenity, 'SYSTEM_DETECTOR_CO') !== false || 
-            stripos($amenity, 'carbon monoxide') !== false ||
-            stripos($amenity, 'CO detector') !== false) {
-            $has_co_detector = true;
-        }
-        if (stripos($amenity, 'first aid') !== false) {
-            $has_first_aid = true;
-        }
-        if (stripos($amenity, 'fire extinguisher') !== false) {
-            $has_fire_extinguisher = true;
+    // Look specifically in "Home safety" group
+    if (is_array($amenities)) {
+        foreach ($amenities as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                $group_name = $amenity_group['group_name'];
+                
+                // Only check "Home safety" group for safety features
+                if (strtolower($group_name) === 'home safety') {
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['value']) && isset($item['name'])) {
+                            $value = $item['value'];
+                            $name = strtolower($item['name']);
+                            
+                            if ($value === 'SYSTEM_DETECTOR_SMOKE' || stripos($name, 'smoke alarm') !== false) {
+                                $has_smoke_detector = true;
+                            }
+                            if ($value === 'SYSTEM_DETECTOR_CO' || stripos($name, 'carbon monoxide') !== false) {
+                                $has_co_detector = true;
+                            }
+                            if ($value === 'SYSTEM_FIRST_AID_KIT' || stripos($name, 'first aid') !== false) {
+                                $has_first_aid = true;
+                            }
+                            if ($value === 'SYSTEM_FIRE_EXTINGUISHER' || stripos($name, 'fire extinguisher') !== false) {
+                                $has_fire_extinguisher = true;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     
