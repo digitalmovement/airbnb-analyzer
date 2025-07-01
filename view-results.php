@@ -53,11 +53,20 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
         .header h1 { margin: 0; font-size: 2.5em; font-weight: 300; }
         .content { padding: 30px; }
         .listing-info { margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; }
+        .overall-score { background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center; }
+        .score-circle { display: inline-block; width: 80px; height: 80px; border-radius: 50%; background: #4CAF50; color: white; line-height: 80px; font-size: 24px; font-weight: bold; margin-right: 20px; }
+        .score-circle.low { background: #f44336; }
+        .score-circle.medium { background: #ff9800; }
         .analysis-section { margin: 30px 0; padding: 25px; background: #f9f9f9; border-radius: 12px; border-left: 5px solid #FF5A5F; }
+        .basic-analysis { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; border-left: 4px solid #2196F3; }
         .claude-section { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; border-left: 4px solid #4CAF50; }
         .rating-badge { display: inline-block; background: #4CAF50; color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; margin: 5px 0; }
         .rating-badge.low { background: #f44336; }
         .rating-badge.medium { background: #ff9800; }
+        .rating-badge.poor { background: #f44336; }
+        .rating-badge.average { background: #ff9800; }
+        .rating-badge.good { background: #4CAF50; }
+        .rating-badge.excellent { background: #2e7d32; }
         .suggestions { list-style: none; padding: 0; }
         .suggestions li { background: #e3f2fd; padding: 10px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #2196f3; }
         .suggestions li:before { content: "💡 "; }
@@ -75,12 +84,57 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
 
     <div class="content">
         <div class="listing-info">
-            <h2><?php echo esc_html($listing_data['title'] ?? 'Unknown Listing'); ?></h2>
+            <h2><?php echo esc_html($listing_data['listing_title'] ?? $listing_data['title'] ?? 'Unknown Listing'); ?></h2>
             <p><strong>URL:</strong> <a href="<?php echo esc_url($request->listing_url); ?>" target="_blank"><?php echo esc_html($request->listing_url); ?></a></p>
             <?php if (!empty($listing_data['photos'][0])): ?>
             <img src="<?php echo esc_url($listing_data['photos'][0]); ?>" style="max-width: 100%; height: 300px; object-fit: cover; border-radius: 8px;">
             <?php endif; ?>
         </div>
+
+        <?php if (isset($analysis['score'])): ?>
+        <div class="overall-score">
+            <?php 
+            $score = intval($analysis['score']);
+            $score_class = $score >= 85 ? '' : ($score >= 70 ? 'medium' : 'low');
+            ?>
+            <div class="score-circle <?php echo $score_class; ?>">
+                <?php echo $score; ?>
+            </div>
+            <div style="display: inline-block; vertical-align: top;">
+                <h3 style="margin: 0;">Overall Score: <?php echo $score; ?>/100</h3>
+                <p style="margin: 10px 0 0 0;"><?php echo esc_html($analysis['summary'] ?? ''); ?></p>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (isset($analysis['recommendations']) && is_array($analysis['recommendations'])): ?>
+        <div class="analysis-section">
+            <h2>📊 Detailed Analysis Results</h2>
+            
+            <?php foreach ($analysis['recommendations'] as $section): ?>
+            <?php if (is_array($section) && isset($section['category'])): ?>
+            <div class="basic-analysis">
+                <h3><?php echo esc_html($section['category']); ?></h3>
+                <div class="rating-badge <?php echo esc_attr($section['status'] ?? 'average'); ?>">
+                    Score: <?php echo esc_html($section['score'] ?? 'N/A'); ?>/<?php echo esc_html($section['max_score'] ?? '10'); ?>
+                </div>
+                <p><strong><?php echo esc_html($section['message'] ?? ''); ?></strong></p>
+                
+                <?php if (isset($section['recommendations']) && is_array($section['recommendations']) && !empty($section['recommendations'])): ?>
+                <div>
+                    <strong>Recommendations:</strong>
+                    <ul class="suggestions">
+                        <?php foreach ($section['recommendations'] as $rec): ?>
+                        <li><?php echo esc_html($rec); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
 
         <?php if (isset($analysis['claude_analysis'])): ?>
         <div class="analysis-section">
@@ -116,6 +170,78 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                 <?php if (!empty($desc['suggestions'])): ?>
                 <ul class="suggestions">
                     <?php foreach ($desc['suggestions'] as $suggestion): ?>
+                    <li><?php echo esc_html($suggestion); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (isset($analysis['claude_analysis']['host'])): ?>
+            <div class="claude-section">
+                <h3>👤 Host Profile Analysis</h3>
+                <?php $host = $analysis['claude_analysis']['host']; $rating = intval($host['rating'] ?? 0); ?>
+                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
+                    Rating: <?php echo $rating; ?>/10
+                </div>
+                <p><?php echo esc_html($host['feedback'] ?? ''); ?></p>
+                <?php if (!empty($host['suggestions'])): ?>
+                <ul class="suggestions">
+                    <?php foreach ($host['suggestions'] as $suggestion): ?>
+                    <li><?php echo esc_html($suggestion); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (isset($analysis['claude_analysis']['amenities'])): ?>
+            <div class="claude-section">
+                <h3>🏠 Amenities Analysis</h3>
+                <?php $amenities = $analysis['claude_analysis']['amenities']; $rating = intval($amenities['rating'] ?? 0); ?>
+                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
+                    Rating: <?php echo $rating; ?>/10
+                </div>
+                <p><?php echo esc_html($amenities['feedback'] ?? ''); ?></p>
+                <?php if (!empty($amenities['suggestions'])): ?>
+                <ul class="suggestions">
+                    <?php foreach ($amenities['suggestions'] as $suggestion): ?>
+                    <li><?php echo esc_html($suggestion); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (isset($analysis['claude_analysis']['reviews'])): ?>
+            <div class="claude-section">
+                <h3>⭐ Reviews Analysis</h3>
+                <?php $reviews = $analysis['claude_analysis']['reviews']; $rating = intval($reviews['rating'] ?? 0); ?>
+                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
+                    Rating: <?php echo $rating; ?>/10
+                </div>
+                <p><?php echo esc_html($reviews['feedback'] ?? ''); ?></p>
+                <?php if (!empty($reviews['suggestions'])): ?>
+                <ul class="suggestions">
+                    <?php foreach ($reviews['suggestions'] as $suggestion): ?>
+                    <li><?php echo esc_html($suggestion); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (isset($analysis['claude_analysis']['cancellation'])): ?>
+            <div class="claude-section">
+                <h3>📋 Cancellation Policy Analysis</h3>
+                <?php $cancellation = $analysis['claude_analysis']['cancellation']; $rating = intval($cancellation['rating'] ?? 0); ?>
+                <div class="rating-badge <?php echo $rating >= 8 ? '' : ($rating >= 6 ? 'medium' : 'low'); ?>">
+                    Rating: <?php echo $rating; ?>/10
+                </div>
+                <p><?php echo esc_html($cancellation['feedback'] ?? ''); ?></p>
+                <?php if (!empty($cancellation['suggestions'])): ?>
+                <ul class="suggestions">
+                    <?php foreach ($cancellation['suggestions'] as $suggestion): ?>
                     <li><?php echo esc_html($suggestion); ?></li>
                     <?php endforeach; ?>
                 </ul>
