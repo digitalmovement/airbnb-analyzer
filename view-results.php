@@ -157,7 +157,16 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             $category_lower = strtolower($section['category'] ?? '');
             
             if (strpos($category_lower, 'title') !== false): 
-                $title_to_show = $listing_data['listing_title'] ?? $listing_data['name'] ?? $listing_data['title'] ?? '';
+                // Prioritize listing_title field, then fallback to others
+                $title_to_show = '';
+                if (!empty($listing_data['listing_title'])) {
+                    $title_to_show = $listing_data['listing_title'];
+                } elseif (!empty($listing_data['title'])) {
+                    $title_to_show = $listing_data['title'];
+                } elseif (!empty($listing_data['name'])) {
+                    $title_to_show = $listing_data['name'];
+                }
+                
                 if (!empty($title_to_show)): ?>
                 <div class="content-preview">
                     <h4>Your Title:</h4>
@@ -173,7 +182,7 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                 </div>
             <?php elseif (strpos($category_lower, 'photo') !== false): ?>
                 <?php 
-                $photos_to_show = $listing_data['photos'] ?? $listing_data['images'] ?? [];
+                $photos_to_show = $listing_data['images'] ?? $listing_data['photos'] ?? [];
                 if (!empty($photos_to_show)): ?>
                 <div class="content-preview">
                     <h4>Your Photos (<?php echo count($photos_to_show); ?> total):</h4>
@@ -224,34 +233,33 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             <?php elseif (strpos($category_lower, 'amenities') !== false || strpos($category_lower, 'climate') !== false || strpos($category_lower, 'safety') !== false): ?>
                 <div class="content-preview">
                     <h4>Available Amenities:</h4>
-                    <?php if (!empty($listing_data['amenities']) && is_array($listing_data['amenities'])): ?>
-                        <div style="max-height: 150px; overflow-y: auto;">
-                            <?php 
-                            $amenity_list = [];
-                            foreach ($listing_data['amenities'] as $amenity_group) {
-                                if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
-                                    foreach ($amenity_group['items'] as $item) {
-                                        if (isset($item['name'])) {
-                                            $amenity_list[] = $item['name'];
-                                        }
+                    <?php 
+                    $amenity_list = [];
+                    
+                    // Parse the amenities structure from JSON
+                    if (!empty($listing_data['amenities']) && is_array($listing_data['amenities'])) {
+                        foreach ($listing_data['amenities'] as $amenity_group) {
+                            if (isset($amenity_group['items']) && is_array($amenity_group['items'])) {
+                                foreach ($amenity_group['items'] as $item) {
+                                    if (isset($item['name']) && !empty($item['name'])) {
+                                        $amenity_list[] = $item['name'];
                                     }
                                 }
                             }
-                            if (!empty($amenity_list)): ?>
-                                <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
-                                <small><?php echo count($amenity_list); ?> amenities total</small>
-                            <?php else: ?>
-                                <p><em>Amenities data structure not recognized</em></p>
-                            <?php endif; ?>
+                        }
+                    }
+                    
+                    if (!empty($amenity_list)): ?>
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
+                            <small><?php echo count($amenity_list); ?> amenities total</small>
                         </div>
                     <?php else: ?>
-                        <p><em>No amenities data available in expected format</em></p>
-                        <?php if (!empty($listing_data)): ?>
-                            <details style="margin-top: 10px;">
-                                <summary style="cursor: pointer; color: #666; font-size: 12px;">Debug: Show available data keys</summary>
-                                <small style="color: #999;"><?php echo esc_html(implode(', ', array_keys($listing_data))); ?></small>
-                            </details>
-                        <?php endif; ?>
+                        <p><em>No amenities found</em></p>
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; color: #666; font-size: 12px;">Debug: Raw amenities data</summary>
+                            <pre style="font-size: 10px; color: #999; max-height: 100px; overflow: auto;"><?php echo esc_html(print_r($listing_data['amenities'] ?? 'No amenities key', true)); ?></pre>
+                        </details>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
