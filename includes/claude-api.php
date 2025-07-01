@@ -393,7 +393,23 @@ function airbnb_analyzer_claude_analyze_reviews($listing_data) {
     if (!empty($listing_data['property_rating_details'])) {
         $rating_details = "Detailed ratings:\n";
         foreach ($listing_data['property_rating_details'] as $category => $score) {
-            $rating_details .= "- $category: $score\n";
+            // Handle both simple values and array structures
+            if (is_array($score)) {
+                // If score is an array, try to extract a meaningful value
+                if (isset($score['value'])) {
+                    $score_value = $score['value'];
+                } elseif (isset($score['score'])) {
+                    $score_value = $score['score'];
+                } elseif (isset($score['rating'])) {
+                    $score_value = $score['rating'];
+                } else {
+                    // If it's an array but no recognizable structure, skip it
+                    continue;
+                }
+            } else {
+                $score_value = $score;
+            }
+            $rating_details .= "- $category: $score_value\n";
         }
     }
     
