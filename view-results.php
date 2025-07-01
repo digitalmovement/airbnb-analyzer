@@ -156,40 +156,47 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             // Show the content being analyzed
             $category_lower = strtolower($section['category'] ?? '');
             
-            if (strpos($category_lower, 'title') !== false && !empty($listing_data['listing_title'])): ?>
+            if (strpos($category_lower, 'title') !== false): 
+                $title_to_show = $listing_data['listing_title'] ?? $listing_data['name'] ?? $listing_data['title'] ?? '';
+                if (!empty($title_to_show)): ?>
                 <div class="content-preview">
                     <h4>Your Title:</h4>
-                    <p><strong>"<?php echo esc_html($listing_data['listing_title']); ?>"</strong></p>
-                    <small>Length: <?php echo strlen($listing_data['listing_title']); ?> characters</small>
+                    <p><strong>"<?php echo esc_html($title_to_show); ?>"</strong></p>
+                    <small>Length: <?php echo strlen($title_to_show); ?> characters</small>
                 </div>
+            <?php endif; ?>
             <?php elseif (strpos($category_lower, 'description') !== false && !empty($listing_data['description'])): ?>
                 <div class="content-preview">
                     <h4>Your Description:</h4>
                     <p><?php echo esc_html(substr($listing_data['description'], 0, 300)); ?><?php echo strlen($listing_data['description']) > 300 ? '...' : ''; ?></p>
                     <small>Length: <?php echo strlen($listing_data['description']); ?> characters</small>
                 </div>
-            <?php elseif (strpos($category_lower, 'photo') !== false && !empty($listing_data['photos'])): ?>
+            <?php elseif (strpos($category_lower, 'photo') !== false): ?>
+                <?php 
+                $photos_to_show = $listing_data['photos'] ?? $listing_data['images'] ?? [];
+                if (!empty($photos_to_show)): ?>
                 <div class="content-preview">
-                    <h4>Your Photos (<?php echo count($listing_data['photos']); ?> total):</h4>
+                    <h4>Your Photos (<?php echo count($photos_to_show); ?> total):</h4>
                     <div class="photos-grid">
                         <?php $photo_count = 0; ?>
-                        <?php foreach (array_slice($listing_data['photos'], 0, 6) as $photo): ?>
+                        <?php foreach (array_slice($photos_to_show, 0, 6) as $photo): ?>
                             <div class="photo-item">
                                 <img src="<?php echo esc_url($photo); ?>" alt="Listing photo">
                             </div>
                             <?php $photo_count++; ?>
                         <?php endforeach; ?>
-                        <?php if (count($listing_data['photos']) > 6): ?>
+                        <?php if (count($photos_to_show) > 6): ?>
                             <div style="grid-column: span 2; text-align: center; padding: 20px; background: #f0f0f0; border-radius: 8px; color: #666;">
-                                +<?php echo count($listing_data['photos']) - 6; ?> more photos
+                                +<?php echo count($photos_to_show) - 6; ?> more photos
                             </div>
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
             <?php elseif (strpos($category_lower, 'host') !== false): ?>
                 <div class="content-preview">
                     <h4>Host Information:</h4>
-                    <?php if (!empty($listing_data['is_supperhost'])): ?>
+                    <?php if (isset($listing_data['is_supperhost'])): ?>
                         <p>✨ <strong>Superhost Status:</strong> <?php echo $listing_data['is_supperhost'] ? 'Yes' : 'No'; ?></p>
                     <?php endif; ?>
                     <?php if (!empty($listing_data['host_response_rate'])): ?>
@@ -201,13 +208,16 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                     <?php if (!empty($listing_data['host_rating'])): ?>
                         <p>⭐ <strong>Host Rating:</strong> <?php echo esc_html($listing_data['host_rating']); ?>/5</p>
                     <?php endif; ?>
+                    <?php if (isset($listing_data['is_guest_favorite'])): ?>
+                        <p>💖 <strong>Guest Favorite:</strong> <?php echo $listing_data['is_guest_favorite'] ? 'Yes' : 'No'; ?></p>
+                    <?php endif; ?>
                 </div>
             <?php elseif (strpos($category_lower, 'review') !== false): ?>
                 <div class="content-preview">
                     <h4>Reviews Summary:</h4>
                     <p>⭐ <strong>Rating:</strong> <?php echo esc_html($listing_data['ratings'] ?? $listing_data['rating'] ?? 'N/A'); ?>/5</p>
-                    <p>📝 <strong>Review Count:</strong> <?php echo esc_html($listing_data['property_number_of_reviews'] ?? 'N/A'); ?> reviews</p>
-                    <?php if (!empty($listing_data['is_guest_favorite'])): ?>
+                    <p>📝 <strong>Review Count:</strong> <?php echo esc_html($listing_data['property_number_of_reviews'] ?? $listing_data['review_count'] ?? 'N/A'); ?> reviews</p>
+                    <?php if (isset($listing_data['is_guest_favorite'])): ?>
                         <p>💖 <strong>Guest Favorite:</strong> <?php echo $listing_data['is_guest_favorite'] ? 'Yes' : 'No'; ?></p>
                     <?php endif; ?>
                 </div>
@@ -231,11 +241,17 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
                                 <p><?php echo esc_html(implode(' • ', array_slice($amenity_list, 0, 20))); ?><?php echo count($amenity_list) > 20 ? ' • ...' : ''; ?></p>
                                 <small><?php echo count($amenity_list); ?> amenities total</small>
                             <?php else: ?>
-                                <p>No amenities data available</p>
+                                <p><em>Amenities data structure not recognized</em></p>
                             <?php endif; ?>
                         </div>
                     <?php else: ?>
-                        <p>No amenities data available</p>
+                        <p><em>No amenities data available in expected format</em></p>
+                        <?php if (!empty($listing_data)): ?>
+                            <details style="margin-top: 10px;">
+                                <summary style="cursor: pointer; color: #666; font-size: 12px;">Debug: Show available data keys</summary>
+                                <small style="color: #999;"><?php echo esc_html(implode(', ', array_keys($listing_data))); ?></small>
+                            </details>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
