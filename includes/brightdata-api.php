@@ -326,6 +326,7 @@ function brightdata_store_request($snapshot_id, $listing_url, $email) {
             email varchar(100) NOT NULL,
             status varchar(20) DEFAULT 'pending' NOT NULL,
             response_data longtext,
+            raw_response_data longtext,
             views int(11) DEFAULT 0,
             last_viewed datetime NULL,
             date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -336,6 +337,12 @@ function brightdata_store_request($snapshot_id, $listing_url, $email) {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+    } else {
+        // Check if raw_response_data column exists, if not add it
+        $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $table_name LIKE 'raw_response_data'");
+        if (empty($column_exists)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN raw_response_data longtext AFTER response_data");
+        }
     }
     
     // Insert request into database
@@ -353,7 +360,7 @@ function brightdata_store_request($snapshot_id, $listing_url, $email) {
 /**
  * Update Brightdata request status
  */
-function brightdata_update_request($snapshot_id, $status, $response_data = null) {
+function brightdata_update_request($snapshot_id, $status, $response_data = null, $raw_response_data = null) {
     global $wpdb;
     
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
@@ -365,6 +372,10 @@ function brightdata_update_request($snapshot_id, $status, $response_data = null)
     
     if ($response_data !== null) {
         $update_data['response_data'] = json_encode($response_data);
+    }
+    
+    if ($raw_response_data !== null) {
+        $update_data['raw_response_data'] = json_encode($raw_response_data);
     }
     
     $wpdb->update(

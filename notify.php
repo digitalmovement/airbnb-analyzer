@@ -95,7 +95,7 @@ function handle_brightdata_notification() {
     
     if (is_wp_error($brightdata_response)) {
         // Update request status to error
-        brightdata_update_request($snapshot_id, 'error', array('error' => $brightdata_response->get_error_message()));
+        brightdata_update_request($snapshot_id, 'error', array('error' => $brightdata_response->get_error_message()), null);
         
         if (function_exists('airbnb_analyzer_debug_log')) {
             airbnb_analyzer_debug_log("Error fetching snapshot data: " . $brightdata_response->get_error_message(), 'Brightdata Notification Error');
@@ -114,7 +114,7 @@ function handle_brightdata_notification() {
     
     if (empty($listing_data)) {
         // Update request status to error
-        brightdata_update_request($snapshot_id, 'error', array('error' => 'No listing data found'));
+        brightdata_update_request($snapshot_id, 'error', array('error' => 'No listing data found'), $brightdata_response);
         
         if (function_exists('airbnb_analyzer_debug_log')) {
             airbnb_analyzer_debug_log("No listing data found for snapshot ID: $snapshot_id", 'Brightdata Notification Error');
@@ -136,11 +136,11 @@ function handle_brightdata_notification() {
         $analysis = airbnb_analyzer_analyze_listing($listing_data);
     }
     
-    // Update request status to completed
+    // Update request status to completed with both processed and raw data
     brightdata_update_request($snapshot_id, 'completed', array(
         'listing_data' => $listing_data,
         'analysis' => $analysis
-    ));
+    ), $brightdata_response);
     
     // Send the analysis via email
     send_analysis_email($request->email, $request->listing_url, $analysis, null, $snapshot_id);

@@ -324,14 +324,27 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             </p>
 
             <details style="margin-top:20px;">
-                <summary style="cursor:pointer; font-weight:bold;">📄 View Raw JSON Response</summary>
+                <summary style="cursor:pointer; font-weight:bold;">🔍 View Raw BrightData Response (All Original Fields)</summary>
+                <pre style="max-height:400px; overflow:auto; background:#000; color:#0f0; padding:15px; font-size:11px; line-height:1.4;">
+<?php 
+if (!empty($request->raw_response_data)) {
+    echo esc_html(json_encode(json_decode($request->raw_response_data, true), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+} else {
+    echo "Raw BrightData response not available for this request.\nThis feature was added later, so only new requests will have raw data.\n\nTo see raw data, submit a new analysis request.";
+}
+?>
+                </pre>
+            </details>
+
+            <details style="margin-top:20px;">
+                <summary style="cursor:pointer; font-weight:bold;">⚙️ View Processed Response Data (Filtered for Analyzer)</summary>
                 <pre style="max-height:400px; overflow:auto; background:#000; color:#0f0; padding:15px; font-size:11px; line-height:1.4;">
 <?php echo esc_html( json_encode( $response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?>
                 </pre>
             </details>
 
             <details style="margin-top:20px;">
-                <summary style="cursor:pointer; font-weight:bold;">🗂️ View Parsed Analysis Array (after PHP processing)</summary>
+                <summary style="cursor:pointer; font-weight:bold;">🗂️ View Parsed Analysis Array (After PHP Processing)</summary>
                 <pre style="max-height:400px; overflow:auto; background:#000; color:#0ff; padding:15px; font-size:11px; line-height:1.4;">
 <?php echo esc_html( print_r( $analysis, true ) ); ?>
                 </pre>
