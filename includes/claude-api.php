@@ -269,7 +269,43 @@ Format your response as JSON with these fields:
  */
 function airbnb_analyzer_claude_analyze_amenities($listing_data) {
     $amenities = isset($listing_data['amenities']) ? $listing_data['amenities'] : array();
-    $amenities_list = implode("\n", $amenities);
+    
+    // Handle both flat and nested amenity formats
+    $amenities_list = '';
+    if (!empty($amenities) && is_array($amenities)) {
+        $flat_amenities = array();
+        
+        // Check if this is the nested format (group->items) or flat format
+        $first_element = $amenities[0] ?? null;
+        if (is_array($first_element) && isset($first_element['items'])) {
+            // Nested format: extract amenity names from groups
+            foreach ($amenities as $amenity_group) {
+                if (isset($amenity_group['group_name']) && isset($amenity_group['items'])) {
+                    $group_name = $amenity_group['group_name'];
+                    $flat_amenities[] = "=== " . $group_name . " ===";
+                    
+                    foreach ($amenity_group['items'] as $item) {
+                        if (isset($item['name']) && !empty($item['name'])) {
+                            $flat_amenities[] = $item['name'];
+                        }
+                    }
+                    $flat_amenities[] = ""; // Add empty line between groups
+                }
+            }
+        } else {
+            // Flat format: each element is either string or array with 'name'
+            foreach ($amenities as $amenity) {
+                if (is_string($amenity)) {
+                    $flat_amenities[] = $amenity;
+                } elseif (is_array($amenity) && isset($amenity['name'])) {
+                    $flat_amenities[] = $amenity['name'];
+                }
+            }
+        }
+        
+        $amenities_list = implode("\n", $flat_amenities);
+    }
+    
     $property_type = isset($listing_data['property_type']) ? $listing_data['property_type'] : 'Property';
     
     // Define essential amenities by category for reference
