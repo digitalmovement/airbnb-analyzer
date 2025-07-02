@@ -132,6 +132,47 @@ if (!$is_shortcode_mode): ?>
         
         /* Error styling */
         .airbnb-analyzer-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb; }
+        
+        /* Expert Analysis Styles */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .expert-analysis-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        #expert-analysis-content h1,
+        #expert-analysis-content h2,
+        #expert-analysis-content h3,
+        #expert-analysis-content h4 {
+            color: #2c5aa0;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        #expert-analysis-content ul,
+        #expert-analysis-content ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        #expert-analysis-content li {
+            margin-bottom: 5px;
+        }
+        
+        #expert-analysis-content strong {
+            color: #333;
+        }
+        
+        #expert-analysis-content pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #667eea;
+        }
     </style>
 </head>
 <body>
@@ -182,6 +223,47 @@ if (!$is_shortcode_mode): ?>
     html { scroll-behavior: smooth; }
     /* Section anchor offset for fixed navigation */
     .airbnb-analyzer-container .analysis-item[id] { scroll-margin-top: 20px; }
+    
+    /* Expert Analysis Styles */
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .airbnb-analyzer-container .expert-analysis-button:hover {
+        transform: translateY(-2px);
+    }
+    
+    .airbnb-analyzer-container #expert-analysis-content h1,
+    .airbnb-analyzer-container #expert-analysis-content h2,
+    .airbnb-analyzer-container #expert-analysis-content h3,
+    .airbnb-analyzer-container #expert-analysis-content h4 {
+        color: #2c5aa0;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    
+    .airbnb-analyzer-container #expert-analysis-content ul,
+    .airbnb-analyzer-container #expert-analysis-content ol {
+        margin: 10px 0;
+        padding-left: 20px;
+    }
+    
+    .airbnb-analyzer-container #expert-analysis-content li {
+        margin-bottom: 5px;
+    }
+    
+    .airbnb-analyzer-container #expert-analysis-content strong {
+        color: #333;
+    }
+    
+    .airbnb-analyzer-container #expert-analysis-content pre {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        border-left: 4px solid #667eea;
+    }
 </style>
 
 <div class="airbnb-analyzer-container">
@@ -467,6 +549,74 @@ if (!$is_shortcode_mode): ?>
         <?php endif; ?>
         <?php endforeach; ?>
         <?php endif; ?>
+
+    <?php // ================== EXPERT ANALYSIS SECTION ================== ?>
+    <div class="expert-analysis-section" style="margin: 40px 0; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; text-align: center; color: white;">
+        <h2 style="color: white; margin-bottom: 15px;">🎯 Get Expert Analysis</h2>
+        <p style="font-size: 1.1em; margin-bottom: 20px; opacity: 0.9;">
+            Unlock comprehensive AI-powered insights with detailed optimization recommendations, 
+            SEO strategies, and ready-to-use content improvements.
+        </p>
+        
+        <button id="expert-analysis-btn" class="expert-analysis-button" style="
+            background: white; 
+            color: #667eea; 
+            border: none; 
+            padding: 15px 30px; 
+            font-size: 1.1em; 
+            font-weight: bold; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.3)'" 
+           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'">
+            🚀 Generate Expert Analysis
+        </button>
+        
+        <!-- Loading State -->
+        <div id="expert-analysis-loading" style="display: none; margin-top: 20px;">
+            <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top: 15px; font-size: 1.1em;">
+                Analyzing your listing with AI...<br>
+                <small style="opacity: 0.8;">This may take 30-60 seconds</small>
+            </p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="expert-analysis-error" style="display: none; margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+            <p id="expert-analysis-error-message" style="color: #ffcccb; margin: 0;"></p>
+            <button id="expert-analysis-retry" style="margin-top: 10px; background: transparent; border: 2px solid white; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer;">
+                Try Again
+            </button>
+        </div>
+    </div>
+    
+    <!-- Expert Analysis Results -->
+    <div id="expert-analysis-results" style="display: none; margin: 40px 0; padding: 30px; background: #f8f9fa; border-radius: 12px; border-left: 5px solid #667eea;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+            <h2 style="color: #333; margin: 0;">🎯 Expert Analysis Results</h2>
+            <span id="expert-analysis-badge" style="background: #28a745; color: white; padding: 5px 12px; border-radius: 15px; font-size: 0.9em; font-weight: bold;">
+                ✨ AI Generated
+            </span>
+        </div>
+        <div id="expert-analysis-content" style="
+            background: white; 
+            padding: 25px; 
+            border-radius: 8px; 
+            line-height: 1.6; 
+            color: #333;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        "></div>
+        <div style="margin-top: 15px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+            <small style="color: #666;">
+                <strong>Generated:</strong> <span id="expert-analysis-timestamp"></span> | 
+                <strong>Model:</strong> <span id="expert-analysis-model"></span> |
+                <span id="expert-analysis-cached-indicator"></span>
+            </small>
+        </div>
     </div>
 
     <?php // ================== ADMIN DEBUG PANEL ================== ?>
@@ -602,8 +752,275 @@ if (!empty($request->raw_response_data)) {
 </div>
 
 <?php if (!$is_shortcode_mode): ?>
+<!-- Load jQuery and JavaScript for expert analysis -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script type="text/javascript">
+    var airbnb_analyzer_ajax = {
+        ajax_url: '<?php echo admin_url('admin-ajax.php'); ?>',
+        nonce: '<?php echo wp_create_nonce('airbnb_analyzer_nonce'); ?>'
+    };
+</script>
+<script>
+// Expert Analysis functionality for results page
+jQuery(document).ready(function($) {
+    // Handle expert analysis button click
+    $('#expert-analysis-btn').on('click', function() {
+        requestExpertAnalysis();
+    });
+    
+    // Handle retry button click
+    $('#expert-analysis-retry').on('click', function() {
+        requestExpertAnalysis();
+    });
+    
+    function requestExpertAnalysis() {
+        // Get snapshot ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const snapshotId = urlParams.get('id');
+        
+        if (!snapshotId) {
+            showError('Unable to identify the analysis. Please refresh the page and try again.');
+            return;
+        }
+        
+        // Show loading state
+        $('#expert-analysis-btn').hide();
+        $('#expert-analysis-error').hide();
+        $('#expert-analysis-results').hide();
+        $('#expert-analysis-loading').show();
+        
+        // Make AJAX request
+        $.ajax({
+            url: airbnb_analyzer_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'expert_analysis_airbnb',
+                nonce: airbnb_analyzer_ajax.nonce,
+                snapshot_id: snapshotId
+            },
+            timeout: 120000, // 2 minutes timeout for AI processing
+            success: function(response) {
+                $('#expert-analysis-loading').hide();
+                
+                if (response.success) {
+                    displayExpertAnalysis(response.data);
+                } else {
+                    showError(response.data.message || 'Expert analysis failed. Please try again.');
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#expert-analysis-loading').hide();
+                
+                if (status === 'timeout') {
+                    showError('The analysis is taking longer than expected. Please try again in a few moments.');
+                } else {
+                    showError('Network error occurred. Please check your connection and try again.');
+                }
+            }
+        });
+    }
+    
+    function displayExpertAnalysis(data) {
+        const analysis = data.analysis;
+        const isCached = data.cached;
+        
+        // Format the content for better display
+        let formattedContent = analysis.content;
+        
+        // Convert markdown-style headers to HTML
+        formattedContent = formattedContent.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+        formattedContent = formattedContent.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+        formattedContent = formattedContent.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+        
+        // Convert **bold** to <strong>
+        formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // Convert bullet points
+        formattedContent = formattedContent.replace(/^- (.*$)/gm, '<li>$1</li>');
+        formattedContent = formattedContent.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+        
+        // Convert line breaks to paragraphs
+        formattedContent = formattedContent.replace(/\n\n/g, '</p><p>');
+        formattedContent = '<p>' + formattedContent + '</p>';
+        
+        // Clean up empty paragraphs
+        formattedContent = formattedContent.replace(/<p><\/p>/g, '');
+        formattedContent = formattedContent.replace(/<p>\s*<h/g, '<h');
+        formattedContent = formattedContent.replace(/<\/h([1-6])>\s*<\/p>/g, '</h$1>');
+        formattedContent = formattedContent.replace(/<p>\s*<ul>/g, '<ul>');
+        formattedContent = formattedContent.replace(/<\/ul>\s*<\/p>/g, '</ul>');
+        
+        // Display the results
+        $('#expert-analysis-content').html(formattedContent);
+        $('#expert-analysis-timestamp').text(formatTimestamp(analysis.generated_at));
+        $('#expert-analysis-model').text(analysis.model_used || 'Claude AI');
+        
+        if (isCached) {
+            $('#expert-analysis-badge').html('📋 Cached Result');
+            $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Cached (previously generated)');
+        } else {
+            $('#expert-analysis-badge').html('✨ Freshly Generated');
+            $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Just generated');
+        }
+        
+        $('#expert-analysis-results').show();
+        
+        // Scroll to results
+        $('html, body').animate({
+            scrollTop: $('#expert-analysis-results').offset().top - 20
+        }, 500);
+    }
+    
+    function showError(message) {
+        $('#expert-analysis-error-message').text(message);
+        $('#expert-analysis-error').show();
+        $('#expert-analysis-btn').show();
+    }
+    
+    function formatTimestamp(timestamp) {
+        if (!timestamp) return 'Unknown';
+        
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+    }
+});
+</script>
 </body>
 </html>
 <?php else: ?>
+<!-- Shortcode mode: Add JavaScript for WordPress with jQuery already loaded -->
+<script type="text/javascript">
+    // Ensure AJAX variables are available in shortcode mode
+    if (typeof airbnb_analyzer_ajax === 'undefined') {
+        var airbnb_analyzer_ajax = {
+            ajax_url: '<?php echo admin_url('admin-ajax.php'); ?>',
+            nonce: '<?php echo wp_create_nonce('airbnb_analyzer_nonce'); ?>'
+        };
+    }
+
+    // Expert Analysis functionality for shortcode mode
+    jQuery(document).ready(function($) {
+        // Handle expert analysis button click
+        $('#expert-analysis-btn').on('click', function() {
+            requestExpertAnalysis();
+        });
+        
+        // Handle retry button click
+        $('#expert-analysis-retry').on('click', function() {
+            requestExpertAnalysis();
+        });
+        
+        function requestExpertAnalysis() {
+            // Get snapshot ID from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const snapshotId = urlParams.get('id');
+            
+            if (!snapshotId) {
+                showError('Unable to identify the analysis. Please refresh the page and try again.');
+                return;
+            }
+            
+            // Show loading state
+            $('#expert-analysis-btn').hide();
+            $('#expert-analysis-error').hide();
+            $('#expert-analysis-results').hide();
+            $('#expert-analysis-loading').show();
+            
+            // Make AJAX request
+            $.ajax({
+                url: airbnb_analyzer_ajax.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'expert_analysis_airbnb',
+                    nonce: airbnb_analyzer_ajax.nonce,
+                    snapshot_id: snapshotId
+                },
+                timeout: 120000, // 2 minutes timeout for AI processing
+                success: function(response) {
+                    $('#expert-analysis-loading').hide();
+                    
+                    if (response.success) {
+                        displayExpertAnalysis(response.data);
+                    } else {
+                        showError(response.data.message || 'Expert analysis failed. Please try again.');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $('#expert-analysis-loading').hide();
+                    
+                    if (status === 'timeout') {
+                        showError('The analysis is taking longer than expected. Please try again in a few moments.');
+                    } else {
+                        showError('Network error occurred. Please check your connection and try again.');
+                    }
+                }
+            });
+        }
+        
+        function displayExpertAnalysis(data) {
+            const analysis = data.analysis;
+            const isCached = data.cached;
+            
+            // Format the content for better display
+            let formattedContent = analysis.content;
+            
+            // Convert markdown-style headers to HTML
+            formattedContent = formattedContent.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+            formattedContent = formattedContent.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+            formattedContent = formattedContent.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+            
+            // Convert **bold** to <strong>
+            formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Convert bullet points
+            formattedContent = formattedContent.replace(/^- (.*$)/gm, '<li>$1</li>');
+            formattedContent = formattedContent.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+            
+            // Convert line breaks to paragraphs
+            formattedContent = formattedContent.replace(/\n\n/g, '</p><p>');
+            formattedContent = '<p>' + formattedContent + '</p>';
+            
+            // Clean up empty paragraphs
+            formattedContent = formattedContent.replace(/<p><\/p>/g, '');
+            formattedContent = formattedContent.replace(/<p>\s*<h/g, '<h');
+            formattedContent = formattedContent.replace(/<\/h([1-6])>\s*<\/p>/g, '</h$1>');
+            formattedContent = formattedContent.replace(/<p>\s*<ul>/g, '<ul>');
+            formattedContent = formattedContent.replace(/<\/ul>\s*<\/p>/g, '</ul>');
+            
+            // Display the results
+            $('#expert-analysis-content').html(formattedContent);
+            $('#expert-analysis-timestamp').text(formatTimestamp(analysis.generated_at));
+            $('#expert-analysis-model').text(analysis.model_used || 'Claude AI');
+            
+            if (isCached) {
+                $('#expert-analysis-badge').html('📋 Cached Result');
+                $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Cached (previously generated)');
+            } else {
+                $('#expert-analysis-badge').html('✨ Freshly Generated');
+                $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Just generated');
+            }
+            
+            $('#expert-analysis-results').show();
+            
+            // Scroll to results smoothly
+            $('html, body').animate({
+                scrollTop: $('#expert-analysis-results').offset().top - 20
+            }, 500);
+        }
+        
+        function showError(message) {
+            $('#expert-analysis-error-message').text(message);
+            $('#expert-analysis-error').show();
+            $('#expert-analysis-btn').show();
+        }
+        
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'Unknown';
+            
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+    });
+</script>
 </div><!-- Close .airbnb-analyzer-container for shortcode mode -->
 <?php endif;
