@@ -579,7 +579,7 @@ if (!$is_shortcode_mode): ?>
             <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
             <p style="margin-top: 15px; font-size: 1.1em;">
                 Analyzing your listing with AI...<br>
-                <small style="opacity: 0.8;">This may take 30-60 seconds</small>
+                <small style="opacity: 0.8;">This may take 1-3 minutes for comprehensive analysis</small>
             </p>
         </div>
         
@@ -798,7 +798,7 @@ jQuery(document).ready(function($) {
                 nonce: airbnb_analyzer_ajax.nonce,
                 snapshot_id: snapshotId
             },
-            timeout: 120000, // 2 minutes timeout for AI processing
+            timeout: 180000, // 3 minutes timeout for AI processing (increased)
             success: function(response) {
                 $('#expert-analysis-loading').hide();
                 
@@ -812,7 +812,7 @@ jQuery(document).ready(function($) {
                 $('#expert-analysis-loading').hide();
                 
                 if (status === 'timeout') {
-                    showError('The analysis is taking longer than expected. Please try again in a few moments.');
+                    showError('The analysis is taking longer than expected (over 3 minutes). This can happen with very complex listings. Please try again, or contact support if the issue persists.');
                 } else {
                     showError('Network error occurred. Please check your connection and try again.');
                 }
@@ -935,7 +935,7 @@ jQuery(document).ready(function($) {
                     nonce: airbnb_analyzer_ajax.nonce,
                     snapshot_id: snapshotId
                 },
-                timeout: 120000, // 2 minutes timeout for AI processing
+                timeout: 180000, // 3 minutes timeout for AI processing (increased)
                 success: function(response) {
                     $('#expert-analysis-loading').hide();
                     
@@ -949,7 +949,7 @@ jQuery(document).ready(function($) {
                     $('#expert-analysis-loading').hide();
                     
                     if (status === 'timeout') {
-                        showError('The analysis is taking longer than expected. Please try again in a few moments.');
+                        showError('The analysis is taking longer than expected (over 3 minutes). This can happen with very complex listings. Please try again, or contact support if the issue persists.');
                     } else {
                         showError('Network error occurred. Please check your connection and try again.');
                     }

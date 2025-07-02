@@ -91,12 +91,19 @@ function airbnb_analyzer_claude_expert_request($prompt) {
                 )
             )
         )),
-        'timeout' => 60 // Longer timeout for complex analysis
+        'timeout' => 150 // Increased timeout to 2.5 minutes for complex analysis
     );
     
     $response = wp_remote_post($url, $args);
     
     if (is_wp_error($response)) {
+        $error_message = $response->get_error_message();
+        
+        // Check if it's a timeout error and provide specific guidance
+        if (strpos($error_message, 'timeout') !== false || strpos($error_message, 'timed out') !== false) {
+            return new WP_Error('timeout_error', 'The AI analysis is taking longer than expected. This can happen with complex listings. Please try again in a few moments, or contact support if the issue persists.');
+        }
+        
         return $response;
     }
     
@@ -105,6 +112,18 @@ function airbnb_analyzer_claude_expert_request($prompt) {
         $body = wp_remote_retrieve_body($response);
         $error_data = json_decode($body, true);
         $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
+        
+        // Handle specific Claude API errors
+        if ($status_code === 429) {
+            return new WP_Error('rate_limit', 'Claude API rate limit exceeded. Please wait a moment and try again.');
+        } elseif ($status_code === 400) {
+            return new WP_Error('bad_request', 'Invalid request to Claude API. The listing data may be too large or contain invalid characters.');
+        } elseif ($status_code === 401) {
+            return new WP_Error('unauthorized', 'Claude API key is invalid or expired. Please check your API key configuration.');
+        } elseif ($status_code === 500) {
+            return new WP_Error('server_error', 'Claude API is experiencing issues. Please try again later.');
+        }
+        
         return new WP_Error('api_error', 'Error from Claude API (' . $status_code . '): ' . $error_message);
     }
     

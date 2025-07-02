@@ -277,9 +277,12 @@ function airbnb_analyzer_handle_expert_analysis() {
         wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
     }
     
+    // Optimize the data for Claude by extracting only essential information
+    $optimized_data = optimize_data_for_claude($raw_data);
+    
     // Prepare the expert analysis prompt
     $expert_prompt = get_expert_analysis_prompt();
-    $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . json_encode($raw_data, JSON_PRETTY_PRINT);
+    $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . json_encode($optimized_data, JSON_PRETTY_PRINT);
     
     // Make Claude API request
     $claude_response = airbnb_analyzer_claude_expert_request($full_prompt);
@@ -431,6 +434,116 @@ Address these specific Airbnb algorithm factors:
 - Individual amenity descriptions: 50 characters each
 
 Please analyze the provided JSON data thoroughly and deliver comprehensive, actionable feedback that will immediately improve the listing\'s performance and search visibility.';
+}
+
+/**
+ * Optimize raw Brightdata JSON for Claude analysis
+ * Extracts only essential data to reduce payload size and processing time
+ * 
+ * @param array $raw_data Full Brightdata response
+ * @return array Optimized data for Claude analysis
+ */
+function optimize_data_for_claude($raw_data) {
+    // Initialize optimized data structure
+    $optimized = array();
+    
+    // Get the first listing data (main property)
+    $listing = isset($raw_data[0]) ? $raw_data[0] : array();
+    
+    // Extract essential listing information
+    $optimized['basic_info'] = array(
+        'title' => $listing['listing_title'] ?? $listing['name'] ?? '',
+        'description' => $listing['description'] ?? '',
+        'property_type' => $listing['category'] ?? $listing['property_type'] ?? '',
+        'room_type' => $listing['room_type'] ?? '',
+        'location' => array(
+            'city' => $listing['city'] ?? '',
+            'neighborhood' => $listing['neighborhood'] ?? '',
+            'address' => $listing['address'] ?? '',
+            'coordinates' => array(
+                'lat' => $listing['latitude'] ?? '',
+                'lng' => $listing['longitude'] ?? ''
+            )
+        )
+    );
+    
+    // Extract host information
+    $optimized['host_info'] = array(
+        'name' => $listing['host_name'] ?? '',
+        'is_superhost' => $listing['is_supperhost'] ?? false,
+        'response_rate' => $listing['host_response_rate'] ?? '',
+        'response_time' => $listing['host_response_time'] ?? '',
+        'host_about' => $listing['host_about'] ?? '',
+        'host_highlights' => $listing['host_highlights'] ?? array(),
+        'verification_labels' => $listing['host_verification_labels'] ?? array()
+    );
+    
+    // Extract pricing and booking info
+    $optimized['pricing'] = array(
+        'base_price' => $listing['price'] ?? '',
+        'currency' => $listing['currency'] ?? '',
+        'cleaning_fee' => $listing['cleaning_fee'] ?? '',
+        'service_fee' => $listing['service_fee'] ?? '',
+        'instant_book' => $listing['instant_book'] ?? false,
+        'minimum_nights' => $listing['minimum_nights'] ?? '',
+        'maximum_nights' => $listing['maximum_nights'] ?? ''
+    );
+    
+    // Extract reviews and ratings
+    $optimized['reviews'] = array(
+        'rating' => $listing['ratings'] ?? $listing['overall_rating'] ?? '',
+        'review_count' => $listing['property_number_of_reviews'] ?? $listing['review_count'] ?? '',
+        'is_guest_favorite' => $listing['is_guest_favorite'] ?? false,
+        'rating_breakdown' => array(
+            'accuracy' => $listing['rating_accuracy'] ?? '',
+            'cleanliness' => $listing['rating_cleanliness'] ?? '',
+            'checkin' => $listing['rating_checkin'] ?? '',
+            'communication' => $listing['rating_communication'] ?? '',
+            'location' => $listing['rating_location'] ?? '',
+            'value' => $listing['rating_value'] ?? ''
+        )
+    );
+    
+    // Extract amenities (limit to important ones)
+    $important_amenities = array();
+    if (isset($listing['amenities']) && is_array($listing['amenities'])) {
+        // Only include first 50 amenities to avoid overwhelming Claude
+        $important_amenities = array_slice($listing['amenities'], 0, 50);
+    }
+    $optimized['amenities'] = $important_amenities;
+    
+    // Extract house rules
+    $optimized['house_rules'] = array(
+        'rules' => $listing['house_rules'] ?? array(),
+        'cancellation_policy' => $listing['cancellation_policy'] ?? '',
+        'check_in_time' => $listing['check_in_time'] ?? '',
+        'check_out_time' => $listing['check_out_time'] ?? ''
+    );
+    
+    // Extract photo information (just count and first few URLs)
+    $optimized['photos'] = array(
+        'count' => isset($listing['photos']) ? count($listing['photos']) : 0,
+        'first_photo' => isset($listing['photos'][0]) ? $listing['photos'][0] : '',
+        'has_multiple' => isset($listing['photos']) && count($listing['photos']) > 1
+    );
+    
+    // Extract neighborhood and location details
+    $optimized['location_details'] = array(
+        'neighborhood_overview' => $listing['neighborhood_overview'] ?? '',
+        'transit' => $listing['transit'] ?? '',
+        'neighborhood_details' => $listing['neighborhood_details'] ?? '',
+        'getting_around' => $listing['getting_around'] ?? ''
+    );
+    
+    // Extract availability and calendar info
+    $optimized['availability'] = array(
+        'availability_30' => $listing['availability_30'] ?? '',
+        'availability_60' => $listing['availability_60'] ?? '',
+        'availability_90' => $listing['availability_90'] ?? '',
+        'availability_365' => $listing['availability_365'] ?? ''
+    );
+    
+    return $optimized;
 }
 
 // Note: The register_settings function is now in includes/settings.php
