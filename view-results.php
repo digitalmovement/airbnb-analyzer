@@ -242,10 +242,36 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
             <?php elseif (strpos($category_lower, 'review') !== false): ?>
                 <div class="content-preview">
                     <h4>Reviews Summary:</h4>
-                    <p>⭐ <strong>Rating:</strong> <?php echo esc_html($listing_data['ratings'] ?? $listing_data['rating'] ?? 'N/A'); ?>/5</p>
+                    <p>⭐ <strong>Overall Rating:</strong> <?php echo esc_html($listing_data['ratings'] ?? $listing_data['rating'] ?? 'N/A'); ?>/5</p>
                     <p>📝 <strong>Review Count:</strong> <?php echo esc_html($listing_data['property_number_of_reviews'] ?? $listing_data['review_count'] ?? 'N/A'); ?> reviews</p>
                     <?php if (isset($listing_data['is_guest_favorite'])): ?>
                         <p>💖 <strong>Guest Favorite:</strong> <?php echo $listing_data['is_guest_favorite'] ? 'Yes' : 'No'; ?></p>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($listing_data['property_rating_details']) && is_array($listing_data['property_rating_details'])): ?>
+                        <h5>Category Ratings:</h5>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.9em;">
+                            <?php foreach ($listing_data['property_rating_details'] as $category): ?>
+                                <?php 
+                                $rating_value = floatval($category['value']);
+                                $is_value_category = strtolower($category['name']) === 'value';
+                                $is_good = $is_value_category ? ($rating_value >= 4.5) : ($rating_value >= 4.9);
+                                $color = $is_good ? '#28a745' : ($rating_value >= 4.5 ? '#ffc107' : '#dc3545');
+                                ?>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span><?php echo esc_html($category['name']); ?>:</span>
+                                    <span style="color: <?php echo $color; ?>; font-weight: bold;"><?php echo esc_html($rating_value); ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <small style="color: #666; margin-top: 10px; display: block;">
+                            🎯 Target: 4.9+ for all categories (Value can be 4.5+)
+                        </small>
+                    <?php else: ?>
+                        <p><em>Category ratings not available</em></p>
+                        <?php if (current_user_can('manage_options')): ?>
+                            <small style="color: #ff9800;">⚠️ Debug: property_rating_details field is empty - regenerate report for category analysis</small>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             <?php elseif (strpos($category_lower, 'amenities') !== false || strpos($category_lower, 'climate') !== false || strpos($category_lower, 'safety') !== false || strpos($category_lower, 'bathroom') !== false || strpos($category_lower, 'bedroom') !== false || strpos($category_lower, 'entertainment') !== false || strpos($category_lower, 'family') !== false || strpos($category_lower, 'internet') !== false || strpos($category_lower, 'kitchen') !== false || strpos($category_lower, 'parking') !== false || strpos($category_lower, 'services') !== false): ?>
