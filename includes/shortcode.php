@@ -5,6 +5,7 @@
 
 // Register shortcode
 add_shortcode('airbnb_analyzer', 'airbnb_analyzer_shortcode');
+add_shortcode('airbnb_analysis_results', 'airbnb_analysis_results_shortcode');
 
 /**
  * Shortcode handler for AirBnB Analyzer
@@ -64,6 +65,37 @@ function airbnb_analyzer_shortcode($atts) {
         <div id="airbnb-analyzer-results" class="airbnb-analyzer-content" style="display: none;"></div>
     </div>
     <?php
+    
+    // Return the buffered content
+    return ob_get_clean();
+}
+
+/**
+ * Shortcode handler for displaying analysis results
+ */
+function airbnb_analysis_results_shortcode($atts) {
+    // Parse attributes
+    $atts = shortcode_atts(array(
+        'id' => '',
+    ), $atts);
+    
+    // Get ID from shortcode attribute or URL parameter
+    $snapshot_id = !empty($atts['id']) ? $atts['id'] : (isset($_GET['id']) ? sanitize_text_field($_GET['id']) : '');
+    
+    if (empty($snapshot_id)) {
+        return '<div class="airbnb-analyzer-error">No analysis ID provided.</div>';
+    }
+    
+    // Start output buffering
+    ob_start();
+    
+    // Include the view-results.php logic but capture its output
+    // We'll set a flag so view-results.php knows to return content instead of outputting directly
+    define('AIRBNB_ANALYZER_SHORTCODE_MODE', true);
+    $_GET['id'] = $snapshot_id; // Ensure the ID is available for view-results.php
+    
+    // Include view-results.php content
+    include(plugin_dir_path(__FILE__) . '../view-results.php');
     
     // Return the buffered content
     return ob_get_clean();

@@ -169,7 +169,7 @@ function send_analysis_email($email, $listing_url, $analysis = null, $error_mess
         $message .= "Please try again or contact support if the problem persists.";
     } else {
         $site_name = get_bloginfo('name');
-        $results_url = site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($snapshot_id));
+        $results_url = site_url("/airbnb-analysis-results/?id=" . urlencode($snapshot_id));
         
         $message = "🎉 Great news! Your Airbnb listing analysis is complete!\n\n";
         $message .= "📍 Analyzed Listing: $listing_url\n\n";

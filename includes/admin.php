@@ -227,12 +227,12 @@ function airbnb_analyzer_stats_page() {
                                             </span>
                                         </td>
                                         <td><?php echo date('M j, g:i A', strtotime($analysis->date_completed)); ?></td>
-                                        <td>
-                                            <a href="<?php echo site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($analysis->snapshot_id)); ?>" 
-                                               target="_blank" class="button button-small">
-                                                View Results
-                                            </a>
-                                        </td>
+                                                                <td>
+                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($analysis->snapshot_id)); ?>" 
+                               target="_blank" class="button button-small">
+                                View Results
+                            </a>
+                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
@@ -278,12 +278,12 @@ function airbnb_analyzer_stats_page() {
                                                 <span style="color: #999;">Never</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td>
-                                            <a href="<?php echo site_url("/wp-content/plugins/airbnb-analyzer/view-results.php?id=" . urlencode($result->snapshot_id)); ?>" 
-                                               target="_blank" class="button button-small">
-                                                View
-                                            </a>
-                                        </td>
+                                                                <td>
+                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($result->snapshot_id)); ?>" 
+                               target="_blank" class="button button-small">
+                                View
+                            </a>
+                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>

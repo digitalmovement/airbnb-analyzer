@@ -3,21 +3,41 @@
  * Results Display Page for AirBnB Listing Analyzer
  */
 
-// Load WordPress
-require_once('../../../wp-config.php');
-require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
+// Check if we're being called via shortcode
+$is_shortcode_mode = defined('AIRBNB_ANALYZER_SHORTCODE_MODE');
+
+if (!$is_shortcode_mode) {
+    // Load WordPress only when not in shortcode mode (shortcode already has WordPress loaded)
+    require_once('../../../wp-config.php');
+    require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
+} else {
+    // In shortcode mode, make sure we have the brightdata-api functions
+    if (!function_exists('brightdata_get_request')) {
+        require_once(plugin_dir_path(__FILE__) . 'brightdata-api.php');
+    }
+}
 
 // Get snapshot ID
 $snapshot_id = isset($_GET['id']) ? sanitize_text_field($_GET['id']) : '';
 
 if (empty($snapshot_id)) {
-    wp_die('Invalid request. No analysis ID provided.');
+    if ($is_shortcode_mode) {
+        echo '<div class="airbnb-analyzer-error">Invalid request. No analysis ID provided.</div>';
+        return;
+    } else {
+        wp_die('Invalid request. No analysis ID provided.');
+    }
 }
 
 // Get request data
 $request = brightdata_get_request($snapshot_id);
 if (!$request || $request->status !== 'completed') {
-    wp_die('Analysis not found or not completed.');
+    if ($is_shortcode_mode) {
+        echo '<div class="airbnb-analyzer-error">Analysis not found or not completed.</div>';
+        return;
+    } else {
+        wp_die('Analysis not found or not completed.');
+    }
 }
 
 // Get analysis data - it's stored as JSON, not serialized
@@ -27,11 +47,23 @@ $analysis = isset($response_data['analysis']) ? $response_data['analysis'] : nul
 
 // Debug: Check if we have data
 if (empty($response_data)) {
-    wp_die('No analysis data found. Response data: ' . esc_html($request->response_data));
+    $error_msg = 'No analysis data found. Response data: ' . esc_html($request->response_data);
+    if ($is_shortcode_mode) {
+        echo '<div class="airbnb-analyzer-error">' . $error_msg . '</div>';
+        return;
+    } else {
+        wp_die($error_msg);
+    }
 }
 
 if (empty($listing_data)) {
-    wp_die('No listing data found. Available keys: ' . esc_html(implode(', ', array_keys($response_data ?: []))));
+    $error_msg = 'No listing data found. Available keys: ' . esc_html(implode(', ', array_keys($response_data ?: [])));
+    if ($is_shortcode_mode) {
+        echo '<div class="airbnb-analyzer-error">' . $error_msg . '</div>';
+        return;
+    } else {
+        wp_die($error_msg);
+    }
 }
 
 // Track view
@@ -39,7 +71,8 @@ global $wpdb;
 $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests'; 
 $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) + 1, last_viewed = NOW() WHERE snapshot_id = %s", $snapshot_id));
 
-?>
+// If in shortcode mode, only output the content, not the full HTML structure
+if (!$is_shortcode_mode): ?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -96,6 +129,9 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
         
         /* Section anchor offset for fixed navigation */
         .analysis-item[id] { scroll-margin-top: 20px; }
+        
+        /* Error styling */
+        .airbnb-analyzer-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
@@ -107,6 +143,54 @@ $wpdb->query($wpdb->prepare("UPDATE $table_name SET views = COALESCE(views, 0) +
     </div>
 
     <div class="content">
+<?php else: ?>
+<!-- Shortcode mode: Add inline styles and start content directly -->
+<style>
+    .airbnb-analyzer-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; }
+    .airbnb-analyzer-container .listing-info { margin-bottom: 30px; padding: 25px; background: #f8f9fa; border-radius: 12px; }
+    .airbnb-analyzer-container .overall-score { background: #e8f5e8; padding: 25px; border-radius: 12px; margin-bottom: 30px; text-align: center; }
+    .airbnb-analyzer-container .score-circle { display: inline-block; width: 80px; height: 80px; border-radius: 50%; background: #4CAF50; color: white; line-height: 80px; font-size: 24px; font-weight: bold; margin-right: 20px; }
+    .airbnb-analyzer-container .score-circle.low { background: #f44336; }
+    .airbnb-analyzer-container .score-circle.medium { background: #ff9800; }
+    .airbnb-analyzer-container .navigation-index { background: #f8f9fa; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
+    .airbnb-analyzer-container .navigation-index h3 { margin: 0 0 15px 0; color: #333; }
+    .airbnb-analyzer-container .nav-links { display: flex; flex-wrap: wrap; gap: 10px; }
+    .airbnb-analyzer-container .nav-link { background: #007cba; color: white; padding: 8px 16px; text-decoration: none; border-radius: 6px; font-size: 14px; transition: background 0.3s; }
+    .airbnb-analyzer-container .nav-link:hover { background: #005a87; color: white; }
+    .airbnb-analyzer-container .analysis-item { margin: 40px 0; padding: 25px; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .airbnb-analyzer-container .analysis-item h3 { margin: 0 0 20px 0; color: #333; font-size: 1.4em; padding-bottom: 10px; border-bottom: 2px solid #eee; }
+    .airbnb-analyzer-container .content-preview { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #007cba; }
+    .airbnb-analyzer-container .content-preview h4 { margin: 0 0 10px 0; color: #555; font-size: 1em; }
+    .airbnb-analyzer-container .photos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; }
+    .airbnb-analyzer-container .photo-item { border-radius: 8px; overflow: hidden; }
+    .airbnb-analyzer-container .photo-item img { width: 100%; height: 120px; object-fit: cover; }
+    .airbnb-analyzer-container .rating-badge { display: inline-block; color: white; padding: 6px 12px; border-radius: 20px; font-weight: bold; margin: 10px 0; font-size: 14px; }
+    .airbnb-analyzer-container .rating-badge.poor { background: #f44336; }
+    .airbnb-analyzer-container .rating-badge.error { background: #f44336; }
+    .airbnb-analyzer-container .rating-badge.warning { background: #ff9800; }
+    .airbnb-analyzer-container .rating-badge.average { background: #ff9800; }
+    .airbnb-analyzer-container .rating-badge.good { background: #4CAF50; }
+    .airbnb-analyzer-container .rating-badge.success { background: #4CAF50; }
+    .airbnb-analyzer-container .rating-badge.excellent { background: #2e7d32; }
+    .airbnb-analyzer-container .recommendations { margin-top: 20px; }
+    .airbnb-analyzer-container .recommendations h4 { margin: 0 0 10px 0; color: #333; }
+    .airbnb-analyzer-container .suggestions { list-style: none; padding: 0; margin: 0; }
+    .airbnb-analyzer-container .suggestions li { background: #e3f2fd; padding: 12px 15px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #2196f3; }
+    .airbnb-analyzer-container .suggestions li:before { content: "💡 "; margin-right: 8px; }
+    .airbnb-analyzer-container .airbnb-analyzer-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb; }
+    /* Smooth scrolling */
+    html { scroll-behavior: smooth; }
+    /* Section anchor offset for fixed navigation */
+    .airbnb-analyzer-container .analysis-item[id] { scroll-margin-top: 20px; }
+</style>
+
+<div class="airbnb-analyzer-container">
+    <div style="background: linear-gradient(135deg, #FF5A5F 0%, #FF3B41 100%); color: white; padding: 40px 30px; text-align: center; border-radius: 12px; margin-bottom: 30px;">
+        <h1 style="margin: 0; font-size: 2.5em; font-weight: 300;">🏠 Airbnb Analysis Results</h1>
+        <p style="margin: 10px 0 0 0;">Comprehensive listing optimization report</p>
+    </div>
+<?php endif; ?>
+
         <div class="listing-info">
             <h2><?php echo esc_html($listing_data['listing_title'] ?? $listing_data['name'] ?? $listing_data['title'] ?? 'Unknown Listing'); ?></h2>
             <p><strong>URL:</strong> <a href="<?php echo esc_url($request->listing_url); ?>" target="_blank"><?php echo esc_html($request->listing_url); ?></a></p>
@@ -454,5 +538,9 @@ if (!empty($request->raw_response_data)) {
     </div>
 </div>
 
+<?php if (!$is_shortcode_mode): ?>
 </body>
 </html>
+<?php else: ?>
+</div><!-- Close .airbnb-analyzer-container for shortcode mode -->
+<?php endif;
