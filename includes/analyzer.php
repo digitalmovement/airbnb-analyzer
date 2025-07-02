@@ -1050,7 +1050,7 @@ function analyze_reviews_enhanced($rating, $review_count, $listing_data) {
     $result = array(
         'category' => 'Reviews & Ratings',
         'score' => 0,
-        'max_score' => 20,
+        'max_score' => 25,
         'status' => 'poor',
         'message' => '',
         'recommendations' => array(),
@@ -1073,29 +1073,125 @@ function analyze_reviews_enhanced($rating, $review_count, $listing_data) {
         $result['recommendations'][] = 'Continue providing excellent service to accumulate more reviews.';
     } else {
         $result['message'] = 'Strong review count builds guest confidence.';
-        $review_score = 10;
+        $review_score = 8;
     }
     
-    // Analyze rating
+    // Analyze overall rating
     $rating_score = 0;
     if ($rating >= 4.8) {
-        $rating_score = 10;
+        $rating_score = 7;
         $result['status'] = 'excellent';
     } elseif ($rating >= 4.5) {
-        $rating_score = 8;
+        $rating_score = 5;
         $result['status'] = 'good';
     } elseif ($rating >= 4.0) {
-        $rating_score = 5;
+        $rating_score = 3;
         $result['status'] = 'average';
         $result['recommendations'][] = 'Focus on improving guest experience to boost ratings above 4.5.';
     } elseif ($rating > 0) {
-        $rating_score = 2;
+        $rating_score = 1;
         $result['status'] = 'poor';
         $result['recommendations'][] = 'Critical: Low ratings hurt bookings. Address guest concerns immediately.';
-        $result['recommendations'][] = 'Focus on cleanliness, accuracy, and communication.';
     }
     
-    $result['score'] = $review_score + $rating_score;
+    // Analyze category ratings (10 points total)
+    $category_score = 0;
+    $problem_categories = array();
+    
+    if (isset($listing_data['property_rating_details']) && is_array($listing_data['property_rating_details'])) {
+        foreach ($listing_data['property_rating_details'] as $category_rating) {
+            if (isset($category_rating['name']) && isset($category_rating['value'])) {
+                $category_name = $category_rating['name'];
+                $category_value = floatval($category_rating['value']);
+                
+                // Value category is subjective and can be lower than 5.0
+                if (strtolower($category_name) === 'value') {
+                    if ($category_value >= 4.5) {
+                        $category_score += 1.5;
+                    } elseif ($category_value >= 4.0) {
+                        $category_score += 1;
+                    } else {
+                        $category_score += 0.5;
+                        $problem_categories[] = $category_name . ' (' . $category_value . ')';
+                    }
+                } else {
+                    // All other categories should be 5.0 or very close
+                    if ($category_value >= 4.9) {
+                        $category_score += 1.5;
+                    } elseif ($category_value >= 4.7) {
+                        $category_score += 1;
+                        $problem_categories[] = $category_name . ' (' . $category_value . ')';
+                    } elseif ($category_value >= 4.5) {
+                        $category_score += 0.5;
+                        $problem_categories[] = $category_name . ' (' . $category_value . ')';
+                    } else {
+                        $problem_categories[] = $category_name . ' (' . $category_value . ')';
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add category-specific recommendations
+    if (!empty($problem_categories)) {
+        $result['recommendations'][] = 'IMPROVE CATEGORY RATINGS: Focus on ' . implode(', ', $problem_categories) . ' to reach 4.9+.';
+        
+        foreach ($listing_data['property_rating_details'] as $category_rating) {
+            $category_name = strtolower($category_rating['name']);
+            $category_value = floatval($category_rating['value']);
+            
+            if ($category_value < 4.9 && $category_name !== 'value') {
+                switch ($category_name) {
+                    case 'cleanliness':
+                        if ($category_value < 4.9) {
+                            $result['recommendations'][] = 'CLEANLINESS: Deep clean before each guest, provide cleaning supplies, ensure spotless bathrooms and kitchen.';
+                        }
+                        break;
+                    case 'accuracy':
+                        if ($category_value < 4.9) {
+                            $result['recommendations'][] = 'ACCURACY: Update photos, description, and amenities list to match exactly what guests will find.';
+                        }
+                        break;
+                    case 'check-in':
+                        if ($category_value < 4.9) {
+                            $result['recommendations'][] = 'CHECK-IN: Provide clear instructions, consider self-check-in, be available for questions.';
+                        }
+                        break;
+                    case 'communication':
+                        if ($category_value < 4.9) {
+                            $result['recommendations'][] = 'COMMUNICATION: Respond quickly, provide local tips, check in during stay, be helpful and friendly.';
+                        }
+                        break;
+                    case 'location':
+                        if ($category_value < 4.9) {
+                            $result['recommendations'][] = 'LOCATION: Provide detailed directions, local guides, transport info, and highlight nearby attractions.';
+                        }
+                        break;
+                }
+            }
+        }
+    }
+    
+    $result['score'] = min(25, $review_score + $rating_score + $category_score);
+    
+    // Update status based on final score
+    if ($result['score'] >= 22) {
+        $result['status'] = 'excellent';
+        if (empty($problem_categories)) {
+            $result['message'] = 'Outstanding ratings across all categories!';
+        } else {
+            $result['message'] = 'Strong ratings with minor areas for improvement.';
+        }
+    } elseif ($result['score'] >= 18) {
+        $result['status'] = 'good';
+        $result['message'] = 'Good ratings with room for improvement.';
+    } elseif ($result['score'] >= 12) {
+        $result['status'] = 'average';
+        $result['message'] = 'Average ratings - focus on guest experience improvements.';
+    } else {
+        $result['status'] = 'poor';
+        $result['message'] = 'Ratings need significant improvement to attract bookings.';
+    }
     
     return $result;
 }

@@ -187,7 +187,7 @@ Format your response as JSON with these fields:
  */
 function airbnb_analyzer_claude_analyze_host($listing_data) {
     $host_name = $listing_data['host_name'];
-    $host_is_superhost = $listing_data['host_is_superhost'] ? 'Yes' : 'No';
+    $host_is_superhost = (isset($listing_data['is_supperhost']) && $listing_data['is_supperhost']) ? 'Yes' : 'No';
     $host_about = isset($listing_data['host_about']) ? $listing_data['host_about'] : '';
     $host_response_rate = isset($listing_data['host_response_rate']) ? $listing_data['host_response_rate'] : '';
     $host_response_time = isset($listing_data['host_response_time']) ? $listing_data['host_response_time'] : '';
