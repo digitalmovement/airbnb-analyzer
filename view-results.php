@@ -488,12 +488,28 @@ if (!$is_shortcode_mode): ?>
             );
             echo '<div style="margin:20px 0; padding:15px; border-left:4px solid #ff9800; background:#fff3e0;">⚠️ Cache cleared for this snapshot. It is now marked as <strong>pending</strong> and will be regenerated on the next analyzer run.</div>';
         }
+        
+        // Handle expert analysis cache clear
+        if ( isset( $_GET['clear_expert'] ) && $_GET['clear_expert'] === '1' ) {
+            $wpdb->update(
+                $table_name,
+                array(
+                    'expert_analysis_data' => null,
+                ),
+                array( 'snapshot_id' => $snapshot_id ),
+                array( '%s' ),
+                array( '%s' )
+            );
+            echo '<div style="margin:20px 0; padding:15px; border-left:4px solid #667eea; background:#f0f8ff;">🎯 Expert analysis cache cleared for this snapshot. Next expert analysis request will generate fresh results.</div>';
+        }
         ?>
         <div style="margin:40px 0; padding:25px; border-radius:12px; background:#f1f1f1;">
             <h2 style="margin-top:0;">🔧 Admin Debug Panel</h2>
             <p>You are seeing this because you have administrator capabilities (<code>manage_options</code>).</p>
             <p>
-                <a href="<?php echo esc_url( add_query_arg( 'rebuild', '1' ) ); ?>" class="button button-danger" style="background:#d63638;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none;">⟳ Clear Cache &amp; Regenerate Report</a>
+                <a href="<?php echo esc_url( add_query_arg( 'rebuild', '1', remove_query_arg('clear_expert') ) ); ?>" class="button button-danger" style="background:#d63638;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none;">⟳ Clear Cache &amp; Regenerate Report</a>
+                
+                <a href="<?php echo esc_url( add_query_arg( 'clear_expert', '1', remove_query_arg('rebuild') ) ); ?>" class="button" style="background:#667eea;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none;margin-left:10px;">🎯 Clear Expert Analysis Cache</a>
                 
                 <?php if ($request->status === 'pending'): ?>
                     <br><br>
@@ -501,6 +517,37 @@ if (!$is_shortcode_mode): ?>
                     <small>Go to <a href="<?php echo admin_url('admin.php?page=airbnb-analyzer-stats'); ?>">Admin → Statistics</a> to process all pending requests, or wait for automatic processing.</small>
                 <?php endif; ?>
             </p>
+
+            <?php
+            // Show expert analysis status
+            $expert_analysis_data = json_decode($request->expert_analysis_data, true);
+            if (!empty($expert_analysis_data)) {
+                echo '<div style="margin: 15px 0; padding: 10px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">';
+                echo '<strong>🎯 Expert Analysis Status:</strong> Cached (' . date('M j, Y g:i A', strtotime($expert_analysis_data['generated_at'])) . ')';
+                echo '<br><small>Model: ' . esc_html($expert_analysis_data['model_used'] ?? 'Unknown') . ' | Requests: ' . intval($request->expert_analysis_requested) . '</small>';
+                echo '</div>';
+            } else {
+                echo '<div style="margin: 15px 0; padding: 10px; background: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px;">';
+                echo '<strong>🎯 Expert Analysis Status:</strong> Not requested yet';
+                if ($request->expert_analysis_requested > 0) {
+                    echo ' (cache cleared, ' . intval($request->expert_analysis_requested) . ' previous requests)';
+                }
+                echo '</div>';
+            }
+            ?>
+
+            <details style="margin-top:20px;">
+                <summary style="cursor:pointer; font-weight:bold;">🎯 View Expert Analysis Prompt (Used for AI Analysis)</summary>
+                <pre style="max-height:400px; overflow:auto; background:#000; color:#00ff00; padding:15px; font-size:11px; line-height:1.4; white-space: pre-wrap;">
+<?php 
+if (function_exists('get_expert_analysis_prompt')) {
+    echo esc_html(get_expert_analysis_prompt());
+} else {
+    echo "Expert analysis prompt function not available.\nThis prompt is used when users click the 'Generate Expert Analysis' button on the results page.";
+}
+?>
+                </pre>
+            </details>
 
             <details style="margin-top:20px;">
                 <summary style="cursor:pointer; font-weight:bold;">🔍 View Raw BrightData Response (All Original Fields)</summary>
@@ -528,6 +575,22 @@ if (!empty($request->raw_response_data)) {
 <?php echo esc_html( print_r( $analysis, true ) ); ?>
                 </pre>
             </details>
+            
+            <?php if (!empty($expert_analysis_data)): ?>
+            <details style="margin-top:20px;">
+                <summary style="cursor:pointer; font-weight:bold;">🎯 View Expert Analysis Data (AI Generated Content)</summary>
+                <pre style="max-height:400px; overflow:auto; background:#000; color:#ffff00; padding:15px; font-size:11px; line-height:1.4; white-space: pre-wrap;">
+<?php echo esc_html($expert_analysis_data['content'] ?? 'No content available'); ?>
+                </pre>
+                <div style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 4px;">
+                    <small>
+                        <strong>Generated:</strong> <?php echo date('F j, Y g:i A', strtotime($expert_analysis_data['generated_at'])); ?><br>
+                        <strong>Model:</strong> <?php echo esc_html($expert_analysis_data['model_used'] ?? 'Unknown'); ?><br>
+                        <strong>Total Requests:</strong> <?php echo intval($request->expert_analysis_requested); ?>
+                    </small>
+                </div>
+            </details>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 

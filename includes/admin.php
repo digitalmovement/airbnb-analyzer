@@ -108,9 +108,14 @@ function airbnb_analyzer_stats_page() {
     $total_views = $wpdb->get_var("SELECT SUM(views) FROM $table_name WHERE status = 'completed'");
     $viewed_results = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE status = 'completed' AND views > 0");
     
+    // Get expert analysis statistics
+    $expert_analysis_requests = $wpdb->get_var("SELECT SUM(expert_analysis_requested) FROM $table_name WHERE expert_analysis_requested > 0");
+    $unique_expert_analysis_users = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_analysis_requested > 0");
+    $expert_analysis_completion_rate = $completed_requests > 0 ? round(($unique_expert_analysis_users / $completed_requests) * 100, 1) : 0;
+    
     // Get recent completed analyses
     $recent_analyses = $wpdb->get_results(
-        "SELECT snapshot_id, listing_url, email, views, last_viewed, date_created, date_completed 
+        "SELECT snapshot_id, listing_url, email, views, last_viewed, date_created, date_completed, expert_analysis_requested 
          FROM $table_name 
          WHERE status = 'completed' 
          ORDER BY date_completed DESC 
@@ -177,6 +182,18 @@ function airbnb_analyzer_stats_page() {
                 <div style="font-size: 2em; font-weight: bold; color: #059669;"><?php echo $engagement_rate; ?>%</div>
                 <small style="color: #666;"><?php echo $viewed_results; ?>/<?php echo $completed_requests; ?> viewed</small>
             </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Expert Analysis</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #667eea;"><?php echo $expert_analysis_requests ?: 0; ?></div>
+                <small style="color: #666;"><?php echo $unique_expert_analysis_users ?: 0; ?> unique users</small>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Expert Usage Rate</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #764ba2;"><?php echo $expert_analysis_completion_rate; ?>%</div>
+                <small style="color: #666;">of completed analyses</small>
+            </div>
         </div>
         
         <?php if ($pending_requests > 0): ?>
@@ -207,6 +224,7 @@ function airbnb_analyzer_stats_page() {
                                 <th>Listing</th>
                                 <th>Email</th>
                                 <th>Views</th>
+                                <th>Expert</th>
                                 <th>Completed</th>
                                 <th>Actions</th>
                             </tr>
@@ -226,17 +244,26 @@ function airbnb_analyzer_stats_page() {
                                                 <?php echo $analysis->views; ?>
                                             </span>
                                         </td>
+                                        <td>
+                                            <?php if ($analysis->expert_analysis_requested > 0): ?>
+                                                <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">
+                                                    ✨ <?php echo $analysis->expert_analysis_requested; ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span style="color: #ccc;">—</span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td><?php echo date('M j, g:i A', strtotime($analysis->date_completed)); ?></td>
-                                                                <td>
-                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($analysis->snapshot_id)); ?>" 
-                               target="_blank" class="button button-small">
-                                View Results
-                            </a>
-                        </td>
+                                        <td>
+                                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($analysis->snapshot_id)); ?>" 
+                                               target="_blank" class="button button-small">
+                                                View Results
+                                            </a>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <tr><td colspan="5">No completed analyses found.</td></tr>
+                                <tr><td colspan="6">No completed analyses found.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -264,26 +291,19 @@ function airbnb_analyzer_stats_page() {
                                             <a href="<?php echo esc_url($result->listing_url); ?>" target="_blank" title="<?php echo esc_attr($result->listing_url); ?>">
                                                 <?php echo esc_html(parse_url($result->listing_url, PHP_URL_HOST) . '/.../rooms/...'); ?>
                                             </a>
-                                            <br><small style="color: #666;"><?php echo esc_html($result->email); ?></small>
                                         </td>
                                         <td>
-                                            <span style="background: #7c3aed; color: white; padding: 2px 8px; border-radius: 12px; font-weight: bold;">
+                                            <span style="background: #7c3aed; color: white; padding: 4px 12px; border-radius: 15px; font-weight: bold;">
                                                 <?php echo $result->views; ?>
                                             </span>
                                         </td>
+                                        <td><?php echo $result->last_viewed ? date('M j, g:i A', strtotime($result->last_viewed)) : 'Never'; ?></td>
                                         <td>
-                                            <?php if ($result->last_viewed): ?>
-                                                <?php echo date('M j, g:i A', strtotime($result->last_viewed)); ?>
-                                            <?php else: ?>
-                                                <span style="color: #999;">Never</span>
-                                            <?php endif; ?>
+                                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($result->snapshot_id)); ?>" 
+                                               target="_blank" class="button button-small">
+                                                View Results
+                                            </a>
                                         </td>
-                                                                <td>
-                            <a href="<?php echo site_url("/airbnb-analysis-results/?id=" . urlencode($result->snapshot_id)); ?>" 
-                               target="_blank" class="button button-small">
-                                View
-                            </a>
-                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
@@ -301,6 +321,7 @@ function airbnb_analyzer_stats_page() {
                 <li><strong>Engagement Rate:</strong> <?php echo $engagement_rate; ?>% of completed analyses are viewed by users</li>
                 <li><strong>Average Views:</strong> <?php echo $average_views; ?> views per completed analysis</li>
                 <li><strong>Success Rate:</strong> <?php echo $total_requests > 0 ? round(($completed_requests / $total_requests) * 100, 1) : 0; ?>% of requests complete successfully</li>
+                <li><strong>Expert Analysis Adoption:</strong> <?php echo $expert_analysis_completion_rate; ?>% of users request expert analysis</li>
                 <?php if ($pending_requests > 0): ?>
                 <li><strong>Note:</strong> <?php echo $pending_requests; ?> requests are still processing</li>
                 <?php endif; ?>

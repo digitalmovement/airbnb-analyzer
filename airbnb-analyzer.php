@@ -81,6 +81,8 @@ function airbnb_analyzer_create_tables() {
         status varchar(20) DEFAULT 'pending' NOT NULL,
         response_data longtext,
         raw_response_data longtext,
+        expert_analysis_data longtext,
+        expert_analysis_requested int(11) DEFAULT 0,
         views int(11) DEFAULT 0,
         last_viewed datetime NULL,
         date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -89,6 +91,13 @@ function airbnb_analyzer_create_tables() {
         UNIQUE KEY snapshot_id (snapshot_id)
     ) $charset_collate;";
     dbDelta($sql2);
+    
+    // Check if expert analysis columns exist for existing installations
+    $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $requests_table LIKE 'expert_analysis_data'");
+    if (empty($column_exists)) {
+        $wpdb->query("ALTER TABLE $requests_table ADD COLUMN expert_analysis_data longtext AFTER raw_response_data");
+        $wpdb->query("ALTER TABLE $requests_table ADD COLUMN expert_analysis_requested int(11) DEFAULT 0 AFTER expert_analysis_data");
+    }
 }
 
 // Register deactivation hook
@@ -119,10 +128,14 @@ function airbnb_analyzer_enqueue_scripts() {
 add_action('wp_enqueue_scripts', 'airbnb_analyzer_enqueue_scripts');
 
 // Register AJAX handlers
-add_action('wp_ajax_analyze_airbnb_listing', 'airbnb_analyzer_process_request');
-add_action('wp_ajax_nopriv_analyze_airbnb_listing', 'airbnb_analyzer_process_request');
+add_action('wp_ajax_analyze_airbnb_listing', 'airbnb_analyzer_handle_ajax');
+add_action('wp_ajax_nopriv_analyze_airbnb_listing', 'airbnb_analyzer_handle_ajax');
 
-function airbnb_analyzer_process_request() {
+// Add AJAX handler for expert analysis
+add_action('wp_ajax_expert_analysis_airbnb', 'airbnb_analyzer_handle_expert_analysis');
+add_action('wp_ajax_nopriv_expert_analysis_airbnb', 'airbnb_analyzer_handle_expert_analysis');
+
+function airbnb_analyzer_handle_ajax() {
     // Verify nonce
     check_ajax_referer('airbnb_analyzer_nonce', 'nonce');
     
@@ -208,6 +221,216 @@ function airbnb_analyzer_store_email($email, $listing_url) {
             'listing_url' => $listing_url
         )
     );
+}
+
+/**
+ * Handle expert analysis AJAX request
+ */
+function airbnb_analyzer_handle_expert_analysis() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'airbnb_analyzer_nonce')) {
+        wp_send_json_error(array('message' => 'Security check failed.'));
+    }
+    
+    $snapshot_id = sanitize_text_field($_POST['snapshot_id']);
+    
+    if (empty($snapshot_id)) {
+        wp_send_json_error(array('message' => 'Invalid request. No snapshot ID provided.'));
+    }
+    
+    // Check if Claude API is configured
+    $claude_api_key = get_option('airbnb_analyzer_claude_api_key');
+    if (empty($claude_api_key)) {
+        wp_send_json_error(array('message' => 'Expert analysis is not available. Claude API is not configured.'));
+    }
+    
+    // Get the request from database
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    $request = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE snapshot_id = %s",
+        $snapshot_id
+    ));
+    
+    if (!$request) {
+        wp_send_json_error(array('message' => 'Analysis not found.'));
+    }
+    
+    if ($request->status !== 'completed') {
+        wp_send_json_error(array('message' => 'Analysis is not completed yet.'));
+    }
+    
+    // Check if expert analysis already exists (cache)
+    if (!empty($request->expert_analysis_data)) {
+        $expert_analysis = json_decode($request->expert_analysis_data, true);
+        if ($expert_analysis) {
+            wp_send_json_success(array(
+                'analysis' => $expert_analysis,
+                'cached' => true
+            ));
+        }
+    }
+    
+    // Get raw JSON data for expert analysis
+    $raw_data = json_decode($request->raw_response_data, true);
+    if (empty($raw_data)) {
+        wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
+    }
+    
+    // Prepare the expert analysis prompt
+    $expert_prompt = get_expert_analysis_prompt();
+    $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . json_encode($raw_data, JSON_PRETTY_PRINT);
+    
+    // Make Claude API request
+    $claude_response = airbnb_analyzer_claude_expert_request($full_prompt);
+    
+    if (is_wp_error($claude_response)) {
+        wp_send_json_error(array('message' => 'Expert analysis failed: ' . $claude_response->get_error_message()));
+    }
+    
+    // Extract analysis content from Claude response
+    $analysis_content = '';
+    if (isset($claude_response['content'][0]['text'])) {
+        $analysis_content = $claude_response['content'][0]['text'];
+    }
+    
+    if (empty($analysis_content)) {
+        wp_send_json_error(array('message' => 'No analysis content received from AI.'));
+    }
+    
+    // Store the expert analysis in database (cache it)
+    $wpdb->update(
+        $table_name,
+        array(
+            'expert_analysis_data' => json_encode(array(
+                'content' => $analysis_content,
+                'generated_at' => current_time('mysql'),
+                'model_used' => 'claude-3-sonnet'
+            )),
+            'expert_analysis_requested' => $request->expert_analysis_requested + 1
+        ),
+        array('snapshot_id' => $snapshot_id)
+    );
+    
+    wp_send_json_success(array(
+        'analysis' => array(
+            'content' => $analysis_content,
+            'generated_at' => current_time('mysql'),
+            'model_used' => 'claude-3-sonnet'
+        ),
+        'cached' => false
+    ));
+}
+
+/**
+ * Get the expert analysis prompt
+ */
+function get_expert_analysis_prompt() {
+    return '# Airbnb Listing Analysis & Optimization Prompt
+
+You are an expert Airbnb listing consultant and SEO specialist. Please analyze the provided Airbnb listing JSON data and provide comprehensive feedback following this exact structure:
+
+## Analysis Requirements:
+
+### 1. LISTING OVERVIEW ANALYSIS
+- Provide overall sentiment assessment of the property
+- Identify key strengths and weaknesses
+- Highlight unique selling propositions
+- Note any red flags or concerns
+
+### 2. DETAILED BREAKDOWN BY SECTION
+Analyze each component with specific feedback:
+
+**A. Title Analysis**
+- Current title effectiveness (character count: max 50 chars)
+- SEO keyword optimization
+- Appeal and click-worthiness
+- **Provide 3 alternative optimized titles** (all under 50 characters)
+
+**B. Description Analysis**
+- Structure and flow assessment
+- Content quality and appeal
+- Missing information gaps
+- Repetition or redundancy issues
+- **Provide completely rewritten optimized description** (max 500 words)
+
+**C. Location & Accessibility**
+- Location description effectiveness
+- Transport links highlighting
+- Local attractions and amenities coverage
+- **Provide optimized location section** (max 150 words)
+
+**D. Amenities Assessment**
+- Amenities presentation and categorization
+- Missing amenities that should be highlighted
+- Negative amenities impact ("Not included" items)
+- **Suggest amenities reordering/rewording**
+
+**E. House Rules Review**
+- Current rules clarity and appeal
+- Missing important rules
+- Rules that might deter bookings
+- **Provide optimized house rules**
+
+### 3. AIRBNB SEO OPTIMIZATION
+Provide specific recommendations for improving search ranking:
+- Primary keywords to target for the location
+- Secondary keywords for property type
+- Title optimization for search visibility
+- Description keyword density recommendations
+- Category and tag suggestions
+- Instant Book recommendations
+- Response time optimization tips
+
+### 4. CONVERSION OPTIMIZATION
+- Booking conversion improvement suggestions
+- Trust-building elements to add
+- Social proof enhancement
+- Pricing strategy recommendations (even without current pricing data)
+- Photo sequence optimization suggestions
+- Urgency and scarcity tactics
+
+### 5. OPTIMIZED CONTENT DELIVERABLES
+Provide ready-to-use, optimized content:
+
+**A. 3 Alternative Titles** (max 50 chars each)
+**B. Complete Property Description** (max 500 words, SEO-optimized)
+**C. Location Description** (max 150 words)
+**D. Optimized Amenities List** (properly categorized)
+**E. House Rules** (guest-friendly but protective)
+**F. Host Welcome Message** (max 100 words)
+
+### 6. SEARCH RANKING FACTORS
+Address these specific Airbnb algorithm factors:
+- Listing completeness score improvements
+- Response rate optimization
+- Booking acceptance rate considerations
+- Calendar availability optimization
+- Review score improvement strategies
+- Superhost qualification pathway
+
+### 7. MARKET POSITIONING
+- Competitive analysis insights
+- Unique value proposition refinement
+- Target guest persona identification
+- Seasonal optimization strategies
+
+## Output Format Requirements:
+- Use clear headings and subheadings
+- Provide character/word counts for all optimized content
+- Include specific, actionable recommendations
+- Highlight critical issues that need immediate attention
+- Present optimized content in copy-paste ready format
+- Include brief explanations for major changes made
+
+## Character Limits to Respect:
+- Title: 50 characters
+- Property description: 500 words
+- Neighborhood description: 150 words
+- House rules: 500 words total
+- Individual amenity descriptions: 50 characters each
+
+Please analyze the provided JSON data thoroughly and deliver comprehensive, actionable feedback that will immediately improve the listing\'s performance and search visibility.';
 }
 
 // Note: The register_settings function is now in includes/settings.php

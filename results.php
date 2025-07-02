@@ -58,6 +58,18 @@ $site_url = home_url();
     <?php wp_head(); ?>
     <link rel="stylesheet" href="<?php echo AIRBNB_ANALYZER_URL; ?>css/results.css">
     
+    <!-- Load jQuery and our scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="<?php echo AIRBNB_ANALYZER_URL; ?>js/script.js"></script>
+    
+    <!-- AJAX variables for expert analysis -->
+    <script type="text/javascript">
+        var airbnb_analyzer_ajax = {
+            ajax_url: '<?php echo admin_url('admin-ajax.php'); ?>',
+            nonce: '<?php echo wp_create_nonce('airbnb_analyzer_nonce'); ?>'
+        };
+    </script>
+    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -405,6 +417,118 @@ $site_url = home_url();
         </div>
         <?php endif; ?>
     </div>
+
+    <!-- Expert Analysis Section -->
+    <div class="expert-analysis-section" style="margin: 40px 30px; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; text-align: center; color: white;">
+        <h2 style="color: white; margin-bottom: 15px;">🎯 Get Expert Analysis</h2>
+        <p style="font-size: 1.1em; margin-bottom: 20px; opacity: 0.9;">
+            Unlock comprehensive AI-powered insights with detailed optimization recommendations, 
+            SEO strategies, and ready-to-use content improvements.
+        </p>
+        
+        <button id="expert-analysis-btn" class="expert-analysis-button" style="
+            background: white; 
+            color: #667eea; 
+            border: none; 
+            padding: 15px 30px; 
+            font-size: 1.1em; 
+            font-weight: bold; 
+            border-radius: 25px; 
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.3)'" 
+           onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0,0,0,0.2)'">
+            🚀 Generate Expert Analysis
+        </button>
+        
+        <!-- Loading State -->
+        <div id="expert-analysis-loading" style="display: none; margin-top: 20px;">
+            <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top: 15px; font-size: 1.1em;">
+                Analyzing your listing with AI...<br>
+                <small style="opacity: 0.8;">This may take 30-60 seconds</small>
+            </p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="expert-analysis-error" style="display: none; margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+            <p id="expert-analysis-error-message" style="color: #ffcccb; margin: 0;"></p>
+            <button id="expert-analysis-retry" style="margin-top: 10px; background: transparent; border: 2px solid white; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer;">
+                Try Again
+            </button>
+        </div>
+    </div>
+    
+    <!-- Expert Analysis Results -->
+    <div id="expert-analysis-results" style="display: none; margin: 40px 30px; padding: 30px; background: #f8f9fa; border-radius: 12px; border-left: 5px solid #667eea;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="color: #333; margin: 0;">🎯 Expert Analysis Results</h2>
+            <span id="expert-analysis-badge" style="background: #28a745; color: white; padding: 5px 12px; border-radius: 15px; font-size: 0.9em; font-weight: bold;">
+                ✨ AI Generated
+            </span>
+        </div>
+        <div id="expert-analysis-content" style="
+            background: white; 
+            padding: 25px; 
+            border-radius: 8px; 
+            line-height: 1.6; 
+            color: #333;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+        "></div>
+        <div style="margin-top: 15px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+            <small style="color: #666;">
+                <strong>Generated:</strong> <span id="expert-analysis-timestamp"></span> | 
+                <strong>Model:</strong> <span id="expert-analysis-model"></span> |
+                <span id="expert-analysis-cached-indicator"></span>
+            </small>
+        </div>
+    </div>
+
+    <!-- Add spinner animation CSS -->
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .expert-analysis-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        #expert-analysis-content h1,
+        #expert-analysis-content h2,
+        #expert-analysis-content h3,
+        #expert-analysis-content h4 {
+            color: #2c5aa0;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        #expert-analysis-content ul,
+        #expert-analysis-content ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        #expert-analysis-content li {
+            margin-bottom: 5px;
+        }
+        
+        #expert-analysis-content strong {
+            color: #333;
+        }
+        
+        #expert-analysis-content pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #667eea;
+        }
+    </style>
 
     <!-- Footer -->
     <div class="footer">

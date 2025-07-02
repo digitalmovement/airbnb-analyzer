@@ -59,6 +59,66 @@ function airbnb_analyzer_claude_request($prompt) {
 }
 
 /**
+ * Send a request to Claude API for expert analysis
+ * Uses Claude 3 Sonnet with higher token limit for comprehensive analysis
+ * 
+ * @param string $prompt The comprehensive analysis prompt
+ * @return array|WP_Error The Claude API response or error
+ */
+function airbnb_analyzer_claude_expert_request($prompt) {
+    $api_key = get_option('airbnb_analyzer_claude_api_key');
+    
+    if (empty($api_key)) {
+        return new WP_Error('missing_api_key', 'Claude API key is not configured. Please set it in the settings page.');
+    }
+    
+    $url = 'https://api.anthropic.com/v1/messages';
+    
+    $args = array(
+        'method' => 'POST',
+        'headers' => array(
+            'Content-Type' => 'application/json',
+            'x-api-key' => $api_key,
+            'anthropic-version' => '2023-06-01'
+        ),
+        'body' => json_encode(array(
+            'model' => 'claude-3-sonnet-20240229', // Using Sonnet for better analysis quality
+            'max_tokens' => 4000, // Higher token limit for comprehensive analysis
+            'messages' => array(
+                array(
+                    'role' => 'user',
+                    'content' => $prompt
+                )
+            )
+        )),
+        'timeout' => 60 // Longer timeout for complex analysis
+    );
+    
+    $response = wp_remote_post($url, $args);
+    
+    if (is_wp_error($response)) {
+        return $response;
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        $body = wp_remote_retrieve_body($response);
+        $error_data = json_decode($body, true);
+        $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
+        return new WP_Error('api_error', 'Error from Claude API (' . $status_code . '): ' . $error_message);
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return new WP_Error('json_error', 'Error parsing Claude API response: ' . json_last_error_msg());
+    }
+    
+    return $data;
+}
+
+/**
  * Analyze listing title with Claude
  * 
  * @param array $listing_data The listing data
