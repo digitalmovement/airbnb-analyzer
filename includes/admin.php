@@ -404,6 +404,19 @@ function airbnb_analyzer_stats_page() {
                 </form>
             </div>
             
+            <div style="margin: 20px 0;">
+                <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline-block; margin-right: 15px;">
+                    <input type="hidden" name="action" value="airbnb_analyzer_reset_failed_batches">
+                    <?php wp_nonce_field('airbnb_analyzer_reset_failed_batches', 'reset_failed_batches_nonce'); ?>
+                    <button type="submit" class="button button-primary" style="background: #dc3232; border-color: #dc3232;">
+                        🔄 Reset Failed Batches
+                    </button>
+                </form>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    This will clear failed batch data so expert analysis can be retried with updated parameters.
+                </small>
+            </div>
+            
             <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.8); border-radius: 6px;">
                 <h5 style="margin: 0 0 10px 0;">Debug Information:</h5>
                 <ul style="margin: 0; padding-left: 20px;">
@@ -947,6 +960,70 @@ function airbnb_analyzer_get_debug_log() {
     }
     
     return $entries;
+}
+
+/**
+ * Handle failed batch reset
+ */
+add_action('admin_post_airbnb_analyzer_reset_failed_batches', 'airbnb_analyzer_handle_reset_failed_batches');
+function airbnb_analyzer_handle_reset_failed_batches() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['reset_failed_batches_nonce'], 'airbnb_analyzer_reset_failed_batches')) {
+        wp_die('Security check failed');
+    }
+    
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_die('Insufficient permissions');
+    }
+    
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    error_log('ADMIN_DEBUG: Resetting failed batches');
+    
+    // Reset all batches with error status
+    $reset_result = $wpdb->update(
+        $table_name,
+        array(
+            'expert_batch_id' => null,
+            'expert_batch_status' => null,
+            'expert_batch_submitted_at' => null,
+            'expert_batch_completed_at' => null,
+            'expert_batch_results_url' => null,
+            'expert_analysis_email_sent' => 0,
+            'expert_analysis_data' => null
+        ),
+        array('expert_batch_status' => 'error')
+    );
+    
+    // Also reset any batches that might be stuck in processing for too long
+    $stuck_batches = $wpdb->update(
+        $table_name,
+        array(
+            'expert_batch_id' => null,
+            'expert_batch_status' => null,
+            'expert_batch_submitted_at' => null,
+            'expert_batch_completed_at' => null,
+            'expert_batch_results_url' => null,
+            'expert_analysis_email_sent' => 0
+        ),
+        "expert_batch_status = 'in_progress' AND expert_batch_submitted_at < DATE_SUB(NOW(), INTERVAL 2 HOUR)"
+    );
+    
+    $total_reset = ($reset_result !== false ? $reset_result : 0) + ($stuck_batches !== false ? $stuck_batches : 0);
+    
+    error_log('ADMIN_DEBUG: Reset ' . $total_reset . ' failed/stuck batches');
+    
+    // Redirect back with success message
+    $redirect_url = add_query_arg(array(
+        'page' => 'airbnb-analyzer-stats',
+        'message' => urlencode('Successfully reset ' . $total_reset . ' failed/stuck batch(es). Expert analysis can now be retried with updated parameters.'),
+        'type' => 'success'
+    ), admin_url('admin.php'));
+    
+    wp_redirect($redirect_url);
+    exit;
 }
 
 // Note: The settings page function is defined in settings.php
