@@ -499,10 +499,15 @@ jQuery(document).ready(function($) {
             return;
         }
         
+        // Prevent double-clicking by disabling the button immediately
+        $('#expert-analysis-btn').prop('disabled', true);
+        $('#expert-analysis-retry').prop('disabled', true);
+        
         // Show loading state
         $('#expert-analysis-btn').hide();
         $('#expert-analysis-error').hide();
         $('#expert-analysis-results').hide();
+        $('#expert-analysis-processing').hide();
         $('#expert-analysis-loading').show();
         
         // Make AJAX request
@@ -519,7 +524,11 @@ jQuery(document).ready(function($) {
                 $('#expert-analysis-loading').hide();
                 
                 if (response.success) {
-                    displayExpertAnalysis(response.data);
+                    if (response.data.status === 'processing') {
+                        displayProcessingStatus(response.data);
+                    } else {
+                        displayExpertAnalysis(response.data);
+                    }
                 } else {
                     showError(response.data.message || 'Expert analysis failed. Please try again.');
                 }
@@ -534,6 +543,119 @@ jQuery(document).ready(function($) {
                 }
             }
         });
+    }
+    
+    function displayProcessingStatus(data) {
+        // Create processing status HTML
+        let html = '<div class="expert-analysis-processing-status">';
+        html += '<div class="processing-icon">⏳</div>';
+        html += '<h3>Expert Analysis In Progress</h3>';
+        html += '<p class="processing-message">' + data.message + '</p>';
+        
+        if (data.batch_id) {
+            html += '<div class="processing-details">';
+            html += '<p><strong>Batch ID:</strong> ' + data.batch_id + '</p>';
+            
+            if (data.batch_status) {
+                html += '<p><strong>Status:</strong> ' + data.batch_status.charAt(0).toUpperCase() + data.batch_status.slice(1) + '</p>';
+            }
+            
+            if (data.submitted_at) {
+                html += '<p><strong>Submitted:</strong> ' + formatTimestamp(data.submitted_at) + '</p>';
+            }
+            
+            if (data.time_remaining) {
+                const minutes = Math.ceil(data.time_remaining / 60);
+                html += '<p><strong>Please wait:</strong> ' + minutes + ' more minute(s) before requesting again</p>';
+            }
+            
+            html += '</div>';
+        }
+        
+        html += '<div class="processing-actions">';
+        html += '<button type="button" id="check-analysis-status" class="button">Check Status</button>';
+        html += '<button type="button" id="refresh-page" class="button">Refresh Page</button>';
+        html += '</div>';
+        
+        html += '<div class="processing-info">';
+        html += '<p><strong>What happens next:</strong></p>';
+        html += '<ul>';
+        html += '<li>Your expert analysis is being processed by Claude AI</li>';
+        html += '<li>This can take up to 24 hours but often completes much sooner</li>';
+        html += '<li>You will receive an email notification when it\'s ready</li>';
+        html += '<li>You can safely close this page - the analysis will continue</li>';
+        html += '</ul>';
+        html += '</div>';
+        
+        html += '</div>';
+        
+        // Display the processing status
+        $('#expert-analysis-processing').html(html).show();
+        
+        // Add event listeners for the buttons
+        $('#check-analysis-status').on('click', function() {
+            checkAnalysisStatus(data.batch_id);
+        });
+        
+        $('#refresh-page').on('click', function() {
+            window.location.reload();
+        });
+        
+        // Don't re-enable the original button - force user to check status or refresh
+        // This prevents accidental duplicate requests
+        
+        // Scroll to processing status
+        $('html, body').animate({
+            scrollTop: $('#expert-analysis-processing').offset().top - 20
+        }, 500);
+    }
+    
+    function checkAnalysisStatus(batchId) {
+        $('#check-analysis-status').prop('disabled', true).text('Checking...');
+        
+        $.ajax({
+            url: airbnb_analyzer_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'check_expert_analysis_status',
+                nonce: airbnb_analyzer_ajax.nonce,
+                batch_id: batchId
+            },
+            success: function(response) {
+                if (response.success) {
+                    if (response.data.status === 'completed') {
+                        // Analysis is complete, refresh to show results
+                        window.location.reload();
+                    } else {
+                        // Still processing, update the status
+                        updateProcessingStatus(response.data);
+                    }
+                } else {
+                    $('#check-analysis-status').prop('disabled', false).text('Check Status');
+                    alert('Unable to check status: ' + (response.data.message || 'Unknown error'));
+                }
+            },
+            error: function() {
+                $('#check-analysis-status').prop('disabled', false).text('Check Status');
+                alert('Network error occurred while checking status.');
+            }
+        });
+    }
+    
+    function updateProcessingStatus(data) {
+        $('#check-analysis-status').prop('disabled', false).text('Check Status');
+        
+        if (data.batch_status) {
+            $('.processing-details p:contains("Status:")').html('<strong>Status:</strong> ' + data.batch_status.charAt(0).toUpperCase() + data.batch_status.slice(1));
+        }
+        
+        if (data.message) {
+            $('.processing-message').text(data.message);
+        }
+        
+        // Show updated timestamp
+        const now = new Date();
+        $('.processing-details').append('<p><strong>Last checked:</strong> ' + now.toLocaleString() + '</p>');
     }
     
     function displayExpertAnalysis(data) {
@@ -590,7 +712,16 @@ jQuery(document).ready(function($) {
     function showError(message) {
         $('#expert-analysis-error-message').text(message);
         $('#expert-analysis-error').show();
-        $('#expert-analysis-btn').show();
+        $('#expert-analysis-btn').show().prop('disabled', false);
+        $('#expert-analysis-retry').prop('disabled', false);
+        
+        // Hide processing status if shown
+        $('#expert-analysis-processing').hide();
+        
+        // Scroll to error message
+        $('html, body').animate({
+            scrollTop: $('#expert-analysis-error').offset().top - 20
+        }, 500);
     }
     
     function formatTimestamp(timestamp) {

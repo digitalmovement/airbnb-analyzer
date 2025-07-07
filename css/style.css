@@ -525,4 +525,109 @@
 
 .pending-actions .button:hover {
     background: #005a87;
+}
+
+/* Expert Analysis Processing Status */
+.expert-analysis-processing-status {
+    text-align: center;
+    color: white;
+}
+
+.expert-analysis-processing-status .processing-icon {
+    font-size: 3em;
+    margin-bottom: 15px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+.expert-analysis-processing-status h3 {
+    margin: 0 0 15px 0;
+    color: white;
+    font-size: 1.4em;
+}
+
+.expert-analysis-processing-status .processing-message {
+    font-size: 1.1em;
+    margin: 0 0 20px 0;
+    line-height: 1.4;
+}
+
+.expert-analysis-processing-status .processing-details {
+    background: rgba(255,255,255,0.1);
+    padding: 15px;
+    border-radius: 6px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.expert-analysis-processing-status .processing-details p {
+    margin: 5px 0;
+    font-size: 0.95em;
+}
+
+.expert-analysis-processing-status .processing-actions {
+    margin: 20px 0;
+}
+
+.expert-analysis-processing-status .processing-actions .button {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid rgba(255,255,255,0.5);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    margin: 0 5px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+}
+
+.expert-analysis-processing-status .processing-actions .button:hover {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.8);
+    transform: translateY(-2px);
+}
+
+.expert-analysis-processing-status .processing-actions .button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.expert-analysis-processing-status .processing-info {
+    background: rgba(255,255,255,0.05);
+    padding: 15px;
+    border-radius: 6px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.expert-analysis-processing-status .processing-info p {
+    margin: 10px 0;
+    font-weight: bold;
+}
+
+.expert-analysis-processing-status .processing-info ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.expert-analysis-processing-status .processing-info li {
+    margin: 5px 0;
+    line-height: 1.3;
+}
+
+/* Prevent button interaction during processing */
+.expert-analysis-processing-active #expert-analysis-btn {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.expert-analysis-processing-active #expert-analysis-retry {
+    pointer-events: none;
+    opacity: 0.6;
 } 

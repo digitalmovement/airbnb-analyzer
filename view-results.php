@@ -625,6 +625,9 @@ if (!$is_shortcode_mode): ?>
             </p>
         </div>
         
+        <!-- Processing Status -->
+        <div id="expert-analysis-processing" style="display: none; margin-top: 20px; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 8px; border: 2px solid rgba(255,255,255,0.3);"></div>
+        
         <!-- Error State -->
         <div id="expert-analysis-error" style="display: none; margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px;">
             <p id="expert-analysis-error-message" style="color: #ffcccb; margin: 0;"></p>

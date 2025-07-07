@@ -420,13 +420,60 @@ function airbnb_analyzer_handle_expert_analysis() {
         }
     }
     
-    // Check if batch is already in progress
-    if (!empty($request->expert_batch_id) && $request->expert_batch_status === 'in_progress') {
-        wp_send_json_success(array(
-            'status' => 'processing',
-            'batch_id' => $request->expert_batch_id,
-            'message' => 'Your expert analysis is being processed. This can take up to 24 hours, but often completes much sooner. You will receive an email when it\'s ready.'
-        ));
+    // Check if batch is already in progress or pending
+    if (!empty($request->expert_batch_id)) {
+        $batch_status = $request->expert_batch_status;
+        
+        // Define statuses that indicate processing is ongoing
+        $processing_statuses = array('in_progress', 'validating', 'processing', 'finalizing');
+        
+        if (in_array($batch_status, $processing_statuses)) {
+            wp_send_json_success(array(
+                'status' => 'processing',
+                'batch_id' => $request->expert_batch_id,
+                'batch_status' => $batch_status,
+                'submitted_at' => $request->expert_batch_submitted_at,
+                'message' => 'Your expert analysis is already being processed. This can take up to 24 hours, but often completes much sooner. You will receive an email when it\'s ready.',
+                'prevent_new_request' => true
+            ));
+        }
+        
+        // If batch failed, allow new request but show warning
+        if ($batch_status === 'failed' || $batch_status === 'error') {
+            // Log the failed batch for debugging
+            error_log("Previous batch failed for snapshot {$snapshot_id}: {$request->expert_batch_id}");
+            
+            // Continue to allow new request, but we'll track this
+            $previous_failures = intval($request->expert_analysis_requested);
+            
+            // Prevent too many retry attempts (max 3)
+            if ($previous_failures >= 3) {
+                wp_send_json_error(array(
+                    'message' => 'Expert analysis has failed multiple times for this listing. Please contact support if you continue to experience issues.',
+                    'max_retries_reached' => true
+                ));
+            }
+        }
+    }
+    
+    // Additional validation: Check for recent batch requests (within last 5 minutes)
+    if (!empty($request->expert_batch_submitted_at)) {
+        $submitted_time = strtotime($request->expert_batch_submitted_at);
+        $current_time = time();
+        $time_diff = $current_time - $submitted_time;
+        
+        // If submitted within last 5 minutes and not failed, prevent new request
+        if ($time_diff < 300 && !in_array($request->expert_batch_status, array('failed', 'error', 'completed'))) {
+            wp_send_json_success(array(
+                'status' => 'processing',
+                'batch_id' => $request->expert_batch_id,
+                'batch_status' => $request->expert_batch_status,
+                'submitted_at' => $request->expert_batch_submitted_at,
+                'message' => 'Your expert analysis was recently submitted and is still being processed. Please wait before requesting another analysis.',
+                'prevent_new_request' => true,
+                'time_remaining' => 300 - $time_diff
+            ));
+        }
     }
     
     // Create new batch request
