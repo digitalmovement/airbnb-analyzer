@@ -75,28 +75,69 @@ function airbnb_analyzer_create_tables() {
     $requests_table = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
     $sql2 = "CREATE TABLE $requests_table (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
-        snapshot_id varchar(100) NOT NULL,
+        snapshot_id varchar(255) NOT NULL,
+        email varchar(255) NOT NULL,
         listing_url text NOT NULL,
-        email varchar(100) NOT NULL,
-        status varchar(20) DEFAULT 'pending' NOT NULL,
+        status varchar(50) NOT NULL DEFAULT 'pending',
+        brightdata_request_id varchar(255) DEFAULT NULL,
         response_data longtext,
         raw_response_data longtext,
+        date_created datetime DEFAULT CURRENT_TIMESTAMP,
+        date_completed datetime DEFAULT NULL,
+        views int(11) DEFAULT 0,
+        last_viewed datetime DEFAULT NULL,
         expert_analysis_data longtext,
         expert_analysis_requested int(11) DEFAULT 0,
-        views int(11) DEFAULT 0,
-        last_viewed datetime NULL,
-        date_created datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-        date_completed datetime NULL,
-        PRIMARY KEY  (id),
-        UNIQUE KEY snapshot_id (snapshot_id)
+        expert_batch_id varchar(255) DEFAULT NULL,
+        expert_batch_status varchar(50) DEFAULT NULL,
+        expert_batch_submitted_at datetime DEFAULT NULL,
+        expert_batch_completed_at datetime DEFAULT NULL,
+        expert_batch_results_url text DEFAULT NULL,
+        expert_analysis_email_sent tinyint(1) DEFAULT 0,
+        PRIMARY KEY (id),
+        KEY snapshot_id (snapshot_id),
+        KEY email (email),
+        KEY status (status),
+        KEY expert_batch_id (expert_batch_id),
+        KEY expert_batch_status (expert_batch_status)
     ) $charset_collate;";
     dbDelta($sql2);
     
-    // Check if expert analysis columns exist for existing installations
-    $column_exists = $wpdb->get_results("SHOW COLUMNS FROM $requests_table LIKE 'expert_analysis_data'");
-    if (empty($column_exists)) {
-        $wpdb->query("ALTER TABLE $requests_table ADD COLUMN expert_analysis_data longtext AFTER raw_response_data");
-        $wpdb->query("ALTER TABLE $requests_table ADD COLUMN expert_analysis_requested int(11) DEFAULT 0 AFTER expert_analysis_data");
+    // Check if we need to add the new columns to existing installations
+    $existing_columns = $wpdb->get_col("DESCRIBE $requests_table");
+    $new_columns = array(
+        'expert_analysis_data' => 'longtext',
+        'expert_analysis_requested' => 'int(11) DEFAULT 0',
+        'expert_batch_id' => 'varchar(255) DEFAULT NULL',
+        'expert_batch_status' => 'varchar(50) DEFAULT NULL',
+        'expert_batch_submitted_at' => 'datetime DEFAULT NULL',
+        'expert_batch_completed_at' => 'datetime DEFAULT NULL',
+        'expert_batch_results_url' => 'text DEFAULT NULL',
+        'expert_analysis_email_sent' => 'tinyint(1) DEFAULT 0'
+    );
+    
+    foreach ($new_columns as $column => $definition) {
+        if (!in_array($column, $existing_columns)) {
+            $wpdb->query("ALTER TABLE $requests_table ADD COLUMN $column $definition");
+        }
+    }
+    
+    // Add indexes for new columns if they don't exist
+    $indexes = $wpdb->get_results("SHOW INDEX FROM $requests_table");
+    $existing_indexes = array();
+    foreach ($indexes as $index) {
+        $existing_indexes[] = $index->Key_name;
+    }
+    
+    $new_indexes = array(
+        'expert_batch_id' => 'expert_batch_id',
+        'expert_batch_status' => 'expert_batch_status'
+    );
+    
+    foreach ($new_indexes as $index_name => $column) {
+        if (!in_array($index_name, $existing_indexes)) {
+            $wpdb->query("ALTER TABLE $requests_table ADD INDEX $index_name ($column)");
+        }
     }
 }
 
@@ -131,9 +172,116 @@ add_action('wp_enqueue_scripts', 'airbnb_analyzer_enqueue_scripts');
 add_action('wp_ajax_analyze_airbnb_listing', 'airbnb_analyzer_handle_ajax');
 add_action('wp_ajax_nopriv_analyze_airbnb_listing', 'airbnb_analyzer_handle_ajax');
 
-// Add AJAX handler for expert analysis
+add_action('wp_ajax_submit_url_for_analysis', 'airbnb_analyzer_submit_url');
+add_action('wp_ajax_nopriv_submit_url_for_analysis', 'airbnb_analyzer_submit_url');
+
 add_action('wp_ajax_expert_analysis_airbnb', 'airbnb_analyzer_handle_expert_analysis');
 add_action('wp_ajax_nopriv_expert_analysis_airbnb', 'airbnb_analyzer_handle_expert_analysis');
+
+add_action('wp_ajax_check_expert_analysis_status', 'airbnb_analyzer_check_expert_analysis_status');
+add_action('wp_ajax_nopriv_check_expert_analysis_status', 'airbnb_analyzer_check_expert_analysis_status');
+
+// Register WordPress cron hook for processing batch results
+add_action('airbnb_analyzer_process_batch_results', 'airbnb_analyzer_process_batch_results_callback');
+
+// Register cron hook for checking batch statuses
+add_action('airbnb_analyzer_check_batch_statuses', 'airbnb_analyzer_check_batch_statuses_callback');
+
+// Schedule cron job on plugin activation
+register_activation_hook(__FILE__, 'airbnb_analyzer_schedule_cron_jobs');
+
+// Clear cron job on plugin deactivation
+register_deactivation_hook(__FILE__, 'airbnb_analyzer_clear_cron_jobs');
+
+/**
+ * Schedule cron jobs for batch processing
+ */
+function airbnb_analyzer_schedule_cron_jobs() {
+    // Schedule batch status checking every 15 minutes
+    if (!wp_next_scheduled('airbnb_analyzer_check_batch_statuses')) {
+        wp_schedule_event(time(), 'every_15_minutes', 'airbnb_analyzer_check_batch_statuses');
+    }
+}
+
+/**
+ * Clear scheduled cron jobs
+ */
+function airbnb_analyzer_clear_cron_jobs() {
+    wp_clear_scheduled_hook('airbnb_analyzer_check_batch_statuses');
+}
+
+/**
+ * Add custom cron schedule for 15 minutes
+ */
+add_filter('cron_schedules', 'airbnb_analyzer_cron_schedules');
+function airbnb_analyzer_cron_schedules($schedules) {
+    $schedules['every_15_minutes'] = array(
+        'interval' => 15 * 60, // 15 minutes in seconds
+        'display' => __('Every 15 Minutes')
+    );
+    return $schedules;
+}
+
+/**
+ * Check status of all pending batch requests
+ */
+function airbnb_analyzer_check_batch_statuses_callback() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    // Get all requests with pending batch processing
+    $pending_batches = $wpdb->get_results(
+        "SELECT snapshot_id, expert_batch_id, expert_batch_submitted_at 
+         FROM $table_name 
+         WHERE expert_batch_status = 'in_progress' 
+         AND expert_batch_id IS NOT NULL 
+         AND expert_batch_submitted_at > DATE_SUB(NOW(), INTERVAL 25 HOUR)"
+    );
+    
+    if (empty($pending_batches)) {
+        return; // No pending batches to check
+    }
+    
+    // Check each batch status
+    foreach ($pending_batches as $batch) {
+        $batch_status = airbnb_analyzer_check_claude_batch_status($batch->expert_batch_id);
+        
+        if (is_wp_error($batch_status)) {
+            // Log error but continue with other batches
+            error_log('Failed to check batch status for ' . $batch->snapshot_id . ': ' . $batch_status->get_error_message());
+            continue;
+        }
+        
+        $current_status = $batch_status['processing_status'];
+        
+        // Update database with current status
+        $wpdb->update(
+            $table_name,
+            array('expert_batch_status' => $current_status),
+            array('snapshot_id' => $batch->snapshot_id)
+        );
+        
+        // If batch is complete, schedule result processing
+        if ($current_status === 'ended') {
+            $results_url = $batch_status['results_url'];
+            
+            if ($results_url) {
+                // Store results URL and mark as completed
+                $wpdb->update(
+                    $table_name,
+                    array(
+                        'expert_batch_results_url' => $results_url,
+                        'expert_batch_completed_at' => current_time('mysql')
+                    ),
+                    array('snapshot_id' => $batch->snapshot_id)
+                );
+                
+                // Process results immediately (within 30 seconds)
+                wp_schedule_single_event(time() + 30, 'airbnb_analyzer_process_batch_results', array($batch->snapshot_id));
+            }
+        }
+    }
+}
 
 function airbnb_analyzer_handle_ajax() {
     // Verify nonce
@@ -224,7 +372,7 @@ function airbnb_analyzer_store_email($email, $listing_url) {
 }
 
 /**
- * Handle expert analysis AJAX request
+ * Handle expert analysis requests with async batch processing
  */
 function airbnb_analyzer_handle_expert_analysis() {
     // Verify nonce
@@ -260,180 +408,343 @@ function airbnb_analyzer_handle_expert_analysis() {
         wp_send_json_error(array('message' => 'Analysis is not completed yet.'));
     }
     
-    // Check if expert analysis already exists (cache)
+    // Check if expert analysis already exists and is complete
     if (!empty($request->expert_analysis_data)) {
         $expert_analysis = json_decode($request->expert_analysis_data, true);
-        if ($expert_analysis) {
+        if ($expert_analysis && isset($expert_analysis['content'])) {
             wp_send_json_success(array(
                 'analysis' => $expert_analysis,
-                'cached' => true
+                'cached' => true,
+                'status' => 'completed'
             ));
         }
     }
     
-    // Get raw JSON data for expert analysis
+    // Check if batch is already in progress
+    if (!empty($request->expert_batch_id) && $request->expert_batch_status === 'in_progress') {
+        wp_send_json_success(array(
+            'status' => 'processing',
+            'batch_id' => $request->expert_batch_id,
+            'message' => 'Your expert analysis is being processed. This can take up to 24 hours, but often completes much sooner. You will receive an email when it\'s ready.'
+        ));
+    }
+    
+    // Create new batch request
     $raw_data = json_decode($request->raw_response_data, true);
     if (empty($raw_data)) {
         wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
     }
     
-    // Optimize the data for Claude by extracting only essential information
+    // Optimize the data for Claude
     $optimized_data = optimize_data_for_claude($raw_data);
     
     // Prepare the expert analysis prompt
     $expert_prompt = get_expert_analysis_prompt();
     $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . json_encode($optimized_data, JSON_PRETTY_PRINT);
     
-    // Make Claude API request
-    $claude_response = airbnb_analyzer_claude_expert_request($full_prompt);
+    // Create Claude batch
+    $batch_response = airbnb_analyzer_create_claude_batch($snapshot_id, $full_prompt);
     
-    if (is_wp_error($claude_response)) {
-        wp_send_json_error(array('message' => 'Expert analysis failed: ' . $claude_response->get_error_message()));
+    if (is_wp_error($batch_response)) {
+        wp_send_json_error(array('message' => 'Failed to create expert analysis batch: ' . $batch_response->get_error_message()));
     }
     
-    // Extract analysis content from Claude response
-    $analysis_content = '';
-    if (isset($claude_response['content'][0]['text'])) {
-        $analysis_content = $claude_response['content'][0]['text'];
-    }
-    
-    if (empty($analysis_content)) {
-        wp_send_json_error(array('message' => 'No analysis content received from AI.'));
-    }
-    
-    // Store the expert analysis in database (cache it)
-    $wpdb->update(
+    // Update database with batch information
+    $batch_id = $batch_response['id'];
+    $update_result = $wpdb->update(
         $table_name,
         array(
-            'expert_analysis_data' => json_encode(array(
-                'content' => $analysis_content,
-                'generated_at' => current_time('mysql'),
-                'model_used' => 'claude-3-sonnet'
-            )),
+            'expert_batch_id' => $batch_id,
+            'expert_batch_status' => 'in_progress',
+            'expert_batch_submitted_at' => current_time('mysql'),
             'expert_analysis_requested' => $request->expert_analysis_requested + 1
         ),
         array('snapshot_id' => $snapshot_id)
     );
     
+    if ($update_result === false) {
+        wp_send_json_error(array('message' => 'Failed to update database with batch information.'));
+    }
+    
     wp_send_json_success(array(
-        'analysis' => array(
-            'content' => $analysis_content,
-            'generated_at' => current_time('mysql'),
-            'model_used' => 'claude-3-sonnet'
-        ),
-        'cached' => false
+        'status' => 'processing',
+        'batch_id' => $batch_id,
+        'message' => 'Your expert analysis has been submitted for processing. This can take up to 24 hours, but often completes much sooner. You will receive an email when it\'s ready.',
+        'estimated_completion' => 'within 24 hours'
     ));
 }
 
 /**
- * Get the expert analysis prompt
+ * Get the enhanced expert analysis prompt for batch processing
  */
 function get_expert_analysis_prompt() {
-    return '# Airbnb Listing Analysis & Optimization Prompt
+    return '# COMPREHENSIVE AIRBNB LISTING ANALYSIS & OPTIMIZATION SYSTEM
 
-You are an expert Airbnb listing consultant and SEO specialist. Please analyze the provided Airbnb listing JSON data and provide comprehensive feedback following this exact structure:
+You are the world\'s leading Airbnb listing consultant, SEO specialist, and conversion optimization expert with 15+ years of experience in vacation rental optimization. You have helped over 10,000 hosts increase their bookings by 300%+ through strategic listing improvements.
 
-## Analysis Requirements:
+## YOUR EXPERTISE COVERS:
+- Airbnb algorithm optimization and search ranking factors
+- Advanced SEO techniques for short-term rental platforms
+- Conversion psychology and booking optimization
+- Revenue management and pricing strategies
+- Guest experience design and host reputation building
+- Market analysis and competitive positioning
+- Content creation and copywriting for hospitality
+- Visual marketing and photo optimization strategies
+- Cross-platform listing optimization (Airbnb, VRBO, Booking.com)
 
-### 1. LISTING OVERVIEW ANALYSIS
-- Provide overall sentiment assessment of the property
-- Identify key strengths and weaknesses
-- Highlight unique selling propositions
-- Note any red flags or concerns
+## ANALYSIS FRAMEWORK:
 
-### 2. DETAILED BREAKDOWN BY SECTION
-Analyze each component with specific feedback:
+Please provide an extremely detailed, actionable analysis following this comprehensive structure. Use the full token limit to provide maximum value.
 
-**A. Title Analysis**
-- Current title effectiveness (character count: max 50 chars)
-- SEO keyword optimization
-- Appeal and click-worthiness
-- **Provide 3 alternative optimized titles** (all under 50 characters)
+### 1. EXECUTIVE SUMMARY & OVERALL ASSESSMENT
+- **Property Overview**: Detailed summary of the listing type, location, and unique characteristics
+- **Current Performance Assessment**: Overall rating of listing effectiveness (1-10) with detailed justification
+- **Top 5 Critical Issues**: Most important problems holding back bookings
+- **Revenue Impact Potential**: Estimated booking increase percentage from implementing recommendations
+- **Competitive Positioning**: How this listing compares to similar properties in the area
+- **Guest Persona Analysis**: Ideal target guests based on property characteristics
 
-**B. Description Analysis**
-- Structure and flow assessment
-- Content quality and appeal
-- Missing information gaps
-- Repetition or redundancy issues
-- **Provide completely rewritten optimized description** (max 500 words)
+### 2. TITLE OPTIMIZATION (Character Limit: 50)
+**Current Title Analysis:**
+- Character count and utilization efficiency
+- Keyword density and search optimization
+- Emotional appeal and click-worthiness assessment
+- Local SEO integration analysis
+- Competitive differentiation evaluation
 
-**C. Location & Accessibility**
-- Location description effectiveness
-- Transport links highlighting
-- Local attractions and amenities coverage
-- **Provide optimized location section** (max 150 words)
+**Optimization Recommendations:**
+- **3 Alternative Titles** (each exactly 50 characters or less)
+- Keyword strategy explanation for each title
+- A/B testing suggestions for title variations
+- Seasonal title adjustment recommendations
+- Character optimization techniques
 
-**D. Amenities Assessment**
-- Amenities presentation and categorization
-- Missing amenities that should be highlighted
-- Negative amenities impact ("Not included" items)
-- **Suggest amenities reordering/rewording**
+### 3. COMPREHENSIVE DESCRIPTION OPTIMIZATION (Max: 500 words)
+**Current Description Analysis:**
+- Structure and readability assessment
+- First 400 characters analysis (preview text critical importance)
+- Keyword optimization opportunities
+- Emotional triggers and persuasion techniques evaluation
+- Information gaps and missing selling points
+- Competitive differentiation in description
 
-**E. House Rules Review**
-- Current rules clarity and appeal
-- Missing important rules
+**Complete Rewritten Description:**
+- **Primary Description** (500 words max, SEO-optimized)
+- **Alternative Short Version** (250 words for platforms requiring brevity)
+- **Seasonal Variations** (summer/winter descriptions if applicable)
+- **Keyword Integration Map**: Primary and secondary keywords placement
+- **Call-to-Action Optimization**: Specific booking-driving language
+
+### 4. LOCATION & NEIGHBORHOOD OPTIMIZATION (Max: 150 words)
+**Current Location Description Analysis:**
+- Transportation accessibility coverage
+- Local attractions and amenities highlighting
+- Neighborhood safety and appeal factors
+- Distance information accuracy and appeal
+- Local business and restaurant recommendations
+
+**Optimized Location Content:**
+- **Complete Neighborhood Description** (150 words max)
+- **Transportation Guide**: Detailed access instructions
+- **Local Attractions List**: Top 10 nearby activities with distances
+- **Dining & Entertainment**: Restaurant and nightlife recommendations
+- **Practical Information**: Grocery stores, pharmacies, ATMs locations
+
+### 5. ADVANCED AMENITIES STRATEGY
+**Current Amenities Analysis:**
+- Amenities categorization and presentation effectiveness
+- Missing essential amenities for property type and price point
+- Competitive amenities comparison
+- Seasonal amenities optimization
+- Technology and modern amenities integration
+
+**Optimized Amenities Strategy:**
+- **Reordered Amenities List**: Most important amenities first
+- **Category Optimization**: Best grouping for visual appeal
+- **Missing Amenities Recommendations**: What to add to increase bookings
+- **Amenities Description Enhancement**: Better wording for each amenity
+- **Competitive Amenities Analysis**: What competitors offer that you don\'t
+
+### 6. HOUSE RULES OPTIMIZATION
+**Current Rules Analysis:**
+- Guest-friendliness vs host protection balance
 - Rules that might deter bookings
-- **Provide optimized house rules**
+- Missing important rules for property protection
+- Enforcement practicality assessment
 
-### 3. AIRBNB SEO OPTIMIZATION
-Provide specific recommendations for improving search ranking:
-- Primary keywords to target for the location
-- Secondary keywords for property type
-- Title optimization for search visibility
-- Description keyword density recommendations
-- Category and tag suggestions
-- Instant Book recommendations
-- Response time optimization tips
+**Optimized House Rules:**
+- **Guest-Friendly Rules List**: Positive framing of necessary restrictions
+- **Essential Rules**: Non-negotiable items for property protection
+- **Welcome Rules**: Positive rules that enhance guest experience
+- **Check-in/Check-out Procedures**: Streamlined and clear instructions
 
-### 4. CONVERSION OPTIMIZATION
-- Booking conversion improvement suggestions
-- Trust-building elements to add
-- Social proof enhancement
-- Pricing strategy recommendations (even without current pricing data)
-- Photo sequence optimization suggestions
-- Urgency and scarcity tactics
+### 7. AIRBNB SEO MASTERY
+**Advanced SEO Analysis:**
+- Primary keyword optimization opportunities
+- Long-tail keyword potential
+- Local SEO integration strategies
+- Seasonal keyword adjustments
+- Cross-platform SEO considerations
 
-### 5. OPTIMIZED CONTENT DELIVERABLES
-Provide ready-to-use, optimized content:
+**Complete SEO Strategy:**
+- **Primary Keywords**: Top 5 keywords to target
+- **Secondary Keywords**: Supporting keyword list
+- **Keyword Density Map**: Where and how often to use each keyword
+- **Local SEO Integration**: City, neighborhood, and landmark optimization
+- **Seasonal SEO Adjustments**: Different keywords for different seasons
+- **Competition Analysis**: Keyword gaps competitors are missing
 
-**A. 3 Alternative Titles** (max 50 chars each)
-**B. Complete Property Description** (max 500 words, SEO-optimized)
-**C. Location Description** (max 150 words)
-**D. Optimized Amenities List** (properly categorized)
-**E. House Rules** (guest-friendly but protective)
-**F. Host Welcome Message** (max 100 words)
+### 8. CONVERSION RATE OPTIMIZATION
+**Current Conversion Analysis:**
+- Booking funnel analysis and optimization opportunities
+- Trust signals assessment and enhancement
+- Social proof optimization strategies
+- Urgency and scarcity psychology implementation
+- Price anchoring and value perception optimization
 
-### 6. SEARCH RANKING FACTORS
-Address these specific Airbnb algorithm factors:
-- Listing completeness score improvements
-- Response rate optimization
-- Booking acceptance rate considerations
+**Advanced Conversion Strategies:**
+- **Trust Building Elements**: What to add to increase guest confidence
+- **Social Proof Enhancement**: How to better showcase reviews and ratings
+- **Urgency Creation**: Ethical scarcity and urgency tactics
+- **Value Perception**: How to justify pricing through description
+- **Booking Friction Reduction**: Remove barriers to booking
+
+### 9. COMPREHENSIVE CONTENT DELIVERABLES
+
+#### A. READY-TO-USE OPTIMIZED CONTENT:
+
+**TITLE OPTIONS** (3 variations, max 50 characters each):
+1. [TITLE 1 - 50 chars exactly]
+2. [TITLE 2 - 50 chars exactly]  
+3. [TITLE 3 - 50 chars exactly]
+
+**COMPLETE PROPERTY DESCRIPTION** (500 words max):
+[Full optimized description ready to copy/paste]
+
+**LOCATION DESCRIPTION** (150 words max):
+[Complete neighborhood/location description ready to copy/paste]
+
+**AMENITIES LIST** (organized and optimized):
+[Bullet-pointed list of amenities in optimal order]
+
+**HOUSE RULES** (guest-friendly format):
+[Complete house rules ready to copy/paste]
+
+**HOST WELCOME MESSAGE** (100 words max):
+[Personalized welcome message template]
+
+#### B. ADDITIONAL OPTIMIZATION CONTENT:
+
+**INSTANT BOOK RECOMMENDATIONS**:
+- Should instant book be enabled for this property type?
+- Pros and cons analysis
+- Alternative strategies if instant book is not suitable
+
+**PRICING STRATEGY INSIGHTS**:
+- Pricing position recommendations (premium/mid-range/budget)
+- Seasonal pricing adjustment suggestions
+- Value justification strategies
+
+**GUEST COMMUNICATION TEMPLATES**:
+- Pre-arrival message template
+- Check-in instructions template
+- Post-stay follow-up message
+
+### 10. AIRBNB ALGORITHM OPTIMIZATION
+**Algorithm Ranking Factors:**
+- Listing completeness score optimization
+- Response rate and time optimization strategies
+- Booking acceptance rate improvement
 - Calendar availability optimization
-- Review score improvement strategies
+- Review score enhancement tactics
 - Superhost qualification pathway
 
-### 7. MARKET POSITIONING
-- Competitive analysis insights
-- Unique value proposition refinement
-- Target guest persona identification
-- Seasonal optimization strategies
+**Advanced Algorithm Strategies:**
+- **Search Ranking Factors**: 15 key factors affecting visibility
+- **Booking Conversion Optimization**: Elements that increase booking likelihood
+- **Host Performance Metrics**: KPIs to monitor and improve
+- **Seasonal Optimization**: How to maintain visibility year-round
+- **New Listing Bootstrap**: Strategies for new listings to gain traction
 
-## Output Format Requirements:
-- Use clear headings and subheadings
-- Provide character/word counts for all optimized content
-- Include specific, actionable recommendations
-- Highlight critical issues that need immediate attention
-- Present optimized content in copy-paste ready format
-- Include brief explanations for major changes made
+### 11. COMPETITIVE MARKET ANALYSIS
+**Competitive Landscape:**
+- Market positioning analysis based on location and property type
+- Competitor pricing and value proposition analysis
+- Differentiation opportunities identification
+- Market gap analysis for positioning
 
-## Character Limits to Respect:
-- Title: 50 characters
-- Property description: 500 words
-- Neighborhood description: 150 words
-- House rules: 500 words total
-- Individual amenity descriptions: 50 characters each
+**Competitive Strategy:**
+- **Unique Value Proposition**: What makes this listing special
+- **Competitive Advantages**: Strengths to emphasize
+- **Competitive Weaknesses**: Areas where competitors are stronger
+- **Market Opportunity**: Underserved guest segments to target
 
-Please analyze the provided JSON data thoroughly and deliver comprehensive, actionable feedback that will immediately improve the listing\'s performance and search visibility.';
+### 12. REVENUE OPTIMIZATION ROADMAP
+**Implementation Priority:**
+1. **Immediate Actions** (0-7 days): Quick wins for immediate impact
+2. **Short-term Actions** (1-4 weeks): Medium effort, high impact changes
+3. **Long-term Strategies** (1-6 months): Investment-required improvements
+
+**Expected Results:**
+- **Booking Increase Estimate**: Percentage increase in bookings expected
+- **Revenue Impact**: Estimated annual revenue increase
+- **Timeline**: When to expect results from each change
+- **ROI Analysis**: Return on investment for recommended changes
+
+### 13. ADVANCED GUEST EXPERIENCE DESIGN
+**Guest Journey Optimization:**
+- Pre-booking: Search and discovery optimization
+- Booking process: Conversion optimization
+- Pre-arrival: Communication and expectation setting
+- Arrival: Check-in experience optimization
+- Stay: Guest experience enhancement
+- Departure: Check-out and follow-up optimization
+
+**Experience Enhancement Strategies:**
+- **Welcome Experience**: First impression optimization
+- **Comfort Optimization**: Physical space improvements
+- **Communication Excellence**: Host-guest interaction optimization
+- **Problem Prevention**: Anticipating and preventing common issues
+- **Review Generation**: Strategies to encourage positive reviews
+
+### 14. LONG-TERM SUCCESS STRATEGIES
+**Sustainable Growth Plan:**
+- **6-Month Optimization Roadmap**: Continuous improvement schedule
+- **Performance Monitoring**: Key metrics to track success
+- **Seasonal Adjustments**: Year-round optimization strategies
+- **Market Evolution**: Adapting to platform and market changes
+- **Portfolio Scaling**: Strategies for managing multiple properties
+
+**Advanced Tactics:**
+- **Cross-Platform Optimization**: Maximizing visibility across all platforms
+- **Dynamic Pricing Integration**: Revenue management best practices
+- **Guest Retention**: Strategies for repeat bookings
+- **Referral Generation**: Word-of-mouth marketing optimization
+- **Brand Building**: Developing a recognizable host brand
+
+## OUTPUT REQUIREMENTS:
+
+1. **Use the FULL token limit** - provide maximum detail and value
+2. **Include specific character/word counts** for all optimized content
+3. **Provide copy-paste ready content** in clearly marked sections
+4. **Include actionable next steps** with specific timelines
+5. **Justify all recommendations** with data-driven reasoning
+6. **Address the specific property type and location** - no generic advice
+7. **Include estimated impact** for major recommendations
+8. **Provide alternative strategies** for different scenarios
+
+## CRITICAL SUCCESS FACTORS:
+- Every recommendation must be immediately actionable
+- All content must be ready to implement without further editing
+- Focus on high-impact changes that require minimal investment
+- Address both short-term wins and long-term growth strategies
+- Provide specific, measurable success metrics
+- Consider the property\'s unique characteristics and target market
+
+Please analyze the provided JSON data thoroughly and deliver the most comprehensive, actionable listing optimization analysis possible. This analysis should serve as a complete roadmap for transforming this listing into a top-performing property that consistently ranks high in search results and converts viewers into bookers.
+
+Remember: You have the full 50,000 token limit - use it to provide extraordinary value and detail that justifies the premium analysis service.';
 }
 
 /**
@@ -544,6 +855,277 @@ function optimize_data_for_claude($raw_data) {
     );
     
     return $optimized;
+}
+
+/**
+ * Check the status of an expert analysis batch
+ */
+function airbnb_analyzer_check_expert_analysis_status() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'airbnb_analyzer_nonce')) {
+        wp_send_json_error(array('message' => 'Security check failed.'));
+    }
+    
+    $snapshot_id = sanitize_text_field($_POST['snapshot_id']);
+    
+    if (empty($snapshot_id)) {
+        wp_send_json_error(array('message' => 'Invalid request. No snapshot ID provided.'));
+    }
+    
+    // Get the request from database
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    $request = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE snapshot_id = %s",
+        $snapshot_id
+    ));
+    
+    if (!$request) {
+        wp_send_json_error(array('message' => 'Analysis not found.'));
+    }
+    
+    // Check if analysis is already complete
+    if (!empty($request->expert_analysis_data)) {
+        $expert_analysis = json_decode($request->expert_analysis_data, true);
+        if ($expert_analysis && isset($expert_analysis['content'])) {
+            wp_send_json_success(array(
+                'status' => 'completed',
+                'analysis' => $expert_analysis,
+                'cached' => true
+            ));
+        }
+    }
+    
+    // If no batch ID, analysis hasn't been submitted yet
+    if (empty($request->expert_batch_id)) {
+        wp_send_json_success(array(
+            'status' => 'not_submitted',
+            'message' => 'Expert analysis has not been submitted yet.'
+        ));
+    }
+    
+    // Check batch status with Claude API
+    $batch_status = airbnb_analyzer_check_claude_batch_status($request->expert_batch_id);
+    
+    if (is_wp_error($batch_status)) {
+        wp_send_json_error(array('message' => 'Failed to check batch status: ' . $batch_status->get_error_message()));
+    }
+    
+    // Update database with current status
+    $current_status = $batch_status['processing_status'];
+    $wpdb->update(
+        $table_name,
+        array('expert_batch_status' => $current_status),
+        array('snapshot_id' => $snapshot_id)
+    );
+    
+    // If batch is complete, process the results
+    if ($current_status === 'ended') {
+        $results_url = $batch_status['results_url'];
+        
+        if ($results_url) {
+            // Store results URL and mark as completed
+            $wpdb->update(
+                $table_name,
+                array(
+                    'expert_batch_results_url' => $results_url,
+                    'expert_batch_completed_at' => current_time('mysql')
+                ),
+                array('snapshot_id' => $snapshot_id)
+            );
+            
+            // Process results in background
+            wp_schedule_single_event(time() + 10, 'airbnb_analyzer_process_batch_results', array($snapshot_id));
+            
+            wp_send_json_success(array(
+                'status' => 'processing_results',
+                'message' => 'Analysis completed! Processing results...'
+            ));
+        }
+    }
+    
+    // Return current status
+    $status_messages = array(
+        'in_progress' => 'Your expert analysis is being processed. This can take up to 24 hours, but often completes much sooner.',
+        'canceling' => 'Analysis is being canceled.',
+        'ended' => 'Analysis completed! Processing results...'
+    );
+    
+    wp_send_json_success(array(
+        'status' => $current_status,
+        'message' => isset($status_messages[$current_status]) ? $status_messages[$current_status] : 'Unknown status',
+        'request_counts' => $batch_status['request_counts'] ?? null
+    ));
+}
+
+/**
+ * Process completed batch results
+ * 
+ * @param string $snapshot_id The snapshot ID to process
+ */
+function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    // Get the request from database
+    $request = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE snapshot_id = %s",
+        $snapshot_id
+    ));
+    
+    if (!$request || empty($request->expert_batch_results_url)) {
+        return false;
+    }
+    
+    // Retrieve batch results
+    $batch_results = airbnb_analyzer_retrieve_claude_batch_results($request->expert_batch_results_url);
+    
+    if (is_wp_error($batch_results)) {
+        // Log error but don't fail completely
+        error_log('Failed to retrieve batch results for ' . $snapshot_id . ': ' . $batch_results->get_error_message());
+        return false;
+    }
+    
+    // Find our specific result
+    $analysis_result = null;
+    $custom_id = 'expert_analysis_' . $snapshot_id;
+    
+    foreach ($batch_results as $result) {
+        if (isset($result['custom_id']) && $result['custom_id'] === $custom_id) {
+            $analysis_result = $result;
+            break;
+        }
+    }
+    
+    if (!$analysis_result) {
+        error_log('Could not find analysis result for ' . $snapshot_id);
+        return false;
+    }
+    
+    // Check if the result was successful
+    if ($analysis_result['result']['type'] !== 'succeeded') {
+        $error_type = $analysis_result['result']['error']['type'] ?? 'unknown';
+        $error_message = $analysis_result['result']['error']['message'] ?? 'Unknown error';
+        
+        // Update database with error status
+        $wpdb->update(
+            $table_name,
+            array(
+                'expert_batch_status' => 'error',
+                'expert_analysis_data' => json_encode(array(
+                    'error' => true,
+                    'error_type' => $error_type,
+                    'error_message' => $error_message,
+                    'generated_at' => current_time('mysql')
+                ))
+            ),
+            array('snapshot_id' => $snapshot_id)
+        );
+        
+        // Send error email
+        airbnb_analyzer_send_expert_analysis_email($request->email, $request->listing_url, null, $error_message, $snapshot_id);
+        return false;
+    }
+    
+    // Extract the analysis content
+    $message = $analysis_result['result']['message'];
+    $analysis_content = '';
+    
+    if (isset($message['content'][0]['text'])) {
+        $analysis_content = $message['content'][0]['text'];
+    }
+    
+    if (empty($analysis_content)) {
+        error_log('No analysis content found for ' . $snapshot_id);
+        return false;
+    }
+    
+    // Store the completed analysis
+    $expert_analysis_data = array(
+        'content' => $analysis_content,
+        'generated_at' => current_time('mysql'),
+        'model_used' => $message['model'] ?? 'claude-3-5-sonnet',
+        'input_tokens' => $message['usage']['input_tokens'] ?? 0,
+        'output_tokens' => $message['usage']['output_tokens'] ?? 0,
+        'batch_processing' => true
+    );
+    
+    $update_result = $wpdb->update(
+        $table_name,
+        array(
+            'expert_analysis_data' => json_encode($expert_analysis_data),
+            'expert_batch_status' => 'completed'
+        ),
+        array('snapshot_id' => $snapshot_id)
+    );
+    
+    if ($update_result !== false) {
+        // Send success email
+        airbnb_analyzer_send_expert_analysis_email($request->email, $request->listing_url, $expert_analysis_data, null, $snapshot_id);
+        
+        // Mark email as sent
+        $wpdb->update(
+            $table_name,
+            array('expert_analysis_email_sent' => 1),
+            array('snapshot_id' => $snapshot_id)
+        );
+    }
+    
+    return true;
+}
+
+/**
+ * Send expert analysis completion email
+ * 
+ * @param string $email Recipient email
+ * @param string $listing_url Original listing URL
+ * @param array|null $analysis_data Analysis data (null if error)
+ * @param string|null $error_message Error message (null if success)
+ * @param string $snapshot_id Snapshot ID for tracking
+ */
+function airbnb_analyzer_send_expert_analysis_email($email, $listing_url, $analysis_data = null, $error_message = null, $snapshot_id = '') {
+    $site_name = get_bloginfo('name');
+    $results_url = home_url('/airbnb-analysis-results/?id=' . $snapshot_id);
+    
+    if ($error_message) {
+        // Error email
+        $subject = 'Expert Analysis Failed - ' . $site_name;
+        $message = "Unfortunately, your expert analysis request has failed.\n\n";
+        $message .= "Listing URL: " . $listing_url . "\n";
+        $message .= "Error: " . $error_message . "\n\n";
+        $message .= "You can try submitting a new request at: " . home_url() . "\n\n";
+        $message .= "If this issue persists, please contact support.\n\n";
+        $message .= "Best regards,\n" . $site_name;
+    } else {
+        // Success email
+        $subject = 'Your Expert Analysis is Ready! - ' . $site_name;
+        $message = "Great news! Your expert Airbnb listing analysis is ready.\n\n";
+        $message .= "Listing URL: " . $listing_url . "\n";
+        $message .= "Analysis Generated: " . ($analysis_data['generated_at'] ?? 'Now') . "\n";
+        $message .= "Model Used: " . ($analysis_data['model_used'] ?? 'Claude AI') . "\n\n";
+        
+        if (isset($analysis_data['output_tokens'])) {
+            $message .= "Analysis Length: " . number_format($analysis_data['output_tokens']) . " tokens (comprehensive analysis)\n\n";
+        }
+        
+        $message .= "View your detailed analysis here:\n" . $results_url . "\n\n";
+        $message .= "Your analysis includes:\n";
+        $message .= "• Complete listing optimization recommendations\n";
+        $message .= "• SEO improvements for better search visibility\n";
+        $message .= "• Ready-to-use optimized content\n";
+        $message .= "• Conversion optimization strategies\n";
+        $message .= "• Market positioning insights\n\n";
+        $message .= "This analysis will remain available for 30 days.\n\n";
+        $message .= "Best regards,\n" . $site_name;
+    }
+    
+    $headers = array(
+        'From: ' . $site_name . ' <' . get_option('admin_email') . '>',
+        'Reply-To: ' . get_option('admin_email'),
+        'Content-Type: text/plain; charset=UTF-8'
+    );
+    
+    wp_mail($email, $subject, $message, $headers);
 }
 
 // Note: The register_settings function is now in includes/settings.php

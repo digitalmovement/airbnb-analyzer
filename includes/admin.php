@@ -113,6 +113,43 @@ function airbnb_analyzer_stats_page() {
     $unique_expert_analysis_users = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_analysis_requested > 0");
     $expert_analysis_completion_rate = $completed_requests > 0 ? round(($unique_expert_analysis_users / $completed_requests) * 100, 1) : 0;
     
+    // Get batch processing statistics
+    $pending_batches = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_batch_status = 'in_progress'");
+    $completed_batches = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_batch_status = 'completed'");
+    $error_batches = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_batch_status = 'error'");
+    $total_batches = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_batch_id IS NOT NULL");
+    $batch_completion_rate = $total_batches > 0 ? round(($completed_batches / $total_batches) * 100, 1) : 0;
+    $emails_sent = $wpdb->get_var("SELECT COUNT(*) FROM $table_name WHERE expert_analysis_email_sent = 1");
+    
+    // Get average processing time for completed batches
+    $avg_processing_time = $wpdb->get_var(
+        "SELECT AVG(TIMESTAMPDIFF(MINUTE, expert_batch_submitted_at, expert_batch_completed_at)) 
+         FROM $table_name 
+         WHERE expert_batch_status = 'completed' 
+         AND expert_batch_submitted_at IS NOT NULL 
+         AND expert_batch_completed_at IS NOT NULL"
+    );
+    $avg_processing_time = $avg_processing_time ? round($avg_processing_time, 0) : 0;
+    
+    // Get recent batch activity
+    $recent_batches = $wpdb->get_results(
+        "SELECT snapshot_id, listing_url, email, expert_batch_status, expert_batch_submitted_at, expert_batch_completed_at, expert_analysis_email_sent 
+         FROM $table_name 
+         WHERE expert_batch_id IS NOT NULL 
+         ORDER BY expert_batch_submitted_at DESC 
+         LIMIT 10"
+    );
+    
+    // Get token usage statistics (if available)
+    $total_tokens_used = $wpdb->get_var(
+        "SELECT SUM(JSON_EXTRACT(expert_analysis_data, '$.output_tokens')) 
+         FROM $table_name 
+         WHERE expert_analysis_data IS NOT NULL 
+         AND JSON_VALID(expert_analysis_data) = 1 
+         AND JSON_EXTRACT(expert_analysis_data, '$.output_tokens') IS NOT NULL"
+    );
+    $total_tokens_used = $total_tokens_used ? intval($total_tokens_used) : 0;
+    
     // Get recent completed analyses
     $recent_analyses = $wpdb->get_results(
         "SELECT snapshot_id, listing_url, email, views, last_viewed, date_created, date_completed, expert_analysis_requested 
@@ -196,10 +233,124 @@ function airbnb_analyzer_stats_page() {
             </div>
         </div>
         
+        <?php if ($total_batches > 0): ?>
+        <h2 style="margin-top: 40px;">🚀 Batch Processing Statistics</h2>
+        <div class="batch-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Total Batches</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #667eea;"><?php echo $total_batches; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Pending Batches</h3>
+                <div style="font-size: 2em; font-weight: bold; color: <?php echo $pending_batches > 0 ? '#ff9800' : '#46b450'; ?>;"><?php echo $pending_batches; ?></div>
+                <?php if ($pending_batches > 0): ?>
+                    <small style="color: #666;">Currently processing</small>
+                <?php endif; ?>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Completed Batches</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #46b450;"><?php echo $completed_batches; ?></div>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Batch Success Rate</h3>
+                <div style="font-size: 2em; font-weight: bold; color: <?php echo $batch_completion_rate >= 90 ? '#46b450' : ($batch_completion_rate >= 70 ? '#ff9800' : '#dc3232'); ?>;"><?php echo $batch_completion_rate; ?>%</div>
+                <small style="color: #666;"><?php echo $completed_batches; ?>/<?php echo $total_batches; ?> successful</small>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Avg Processing Time</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #7c3aed;"><?php echo $avg_processing_time; ?></div>
+                <small style="color: #666;">minutes</small>
+            </div>
+            
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Emails Sent</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #059669;"><?php echo $emails_sent; ?></div>
+                <small style="color: #666;">notifications delivered</small>
+            </div>
+            
+            <?php if ($total_tokens_used > 0): ?>
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Total Tokens</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #6366f1;"><?php echo number_format($total_tokens_used); ?></div>
+                <small style="color: #666;">output tokens generated</small>
+            </div>
+            <?php endif; ?>
+            
+            <?php if ($error_batches > 0): ?>
+            <div class="stat-card" style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center;">
+                <h3 style="margin: 0; color: #666;">Failed Batches</h3>
+                <div style="font-size: 2em; font-weight: bold; color: #dc3232;"><?php echo $error_batches; ?></div>
+                <small style="color: #666;">require attention</small>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($pending_batches > 0 || $recent_batches): ?>
+        <h2 style="margin-top: 40px;">📋 Recent Batch Activity</h2>
+        <?php if ($pending_batches > 0): ?>
+        <div style="margin: 20px 0; padding: 15px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
+            <h4 style="margin: 0 0 10px 0; color: #e65100;">⏳ Pending Batches</h4>
+            <p style="margin: 0;">There are currently <strong><?php echo $pending_batches; ?></strong> batch(es) being processed by Claude AI. These will complete automatically within 24 hours and users will receive email notifications.</p>
+            <p style="margin: 10px 0 0 0;"><small>📡 Automatic status checking runs every 15 minutes</small></p>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($recent_batches): ?>
+        <table class="wp-list-table widefat fixed striped" style="margin-top: 20px;">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Listing URL</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Completed</th>
+                    <th>Email Sent</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($recent_batches as $batch): ?>
+                    <tr>
+                        <td><?php echo esc_html($batch->email); ?></td>
+                        <td><a href="<?php echo esc_url($batch->listing_url); ?>" target="_blank" title="<?php echo esc_attr($batch->listing_url); ?>"><?php echo esc_html(wp_trim_words($batch->listing_url, 5, '...')); ?></a></td>
+                        <td>
+                            <?php
+                            $status_colors = array(
+                                'in_progress' => '#ff9800',
+                                'completed' => '#46b450',
+                                'error' => '#dc3232',
+                                'canceled' => '#666'
+                            );
+                            $status_color = isset($status_colors[$batch->expert_batch_status]) ? $status_colors[$batch->expert_batch_status] : '#666';
+                            $status_text = ucfirst(str_replace('_', ' ', $batch->expert_batch_status));
+                            ?>
+                            <span style="color: <?php echo $status_color; ?>; font-weight: bold;">
+                                <?php echo esc_html($status_text); ?>
+                            </span>
+                        </td>
+                        <td><?php echo $batch->expert_batch_submitted_at ? esc_html(date('M j, H:i', strtotime($batch->expert_batch_submitted_at))) : '-'; ?></td>
+                        <td><?php echo $batch->expert_batch_completed_at ? esc_html(date('M j, H:i', strtotime($batch->expert_batch_completed_at))) : '-'; ?></td>
+                        <td><?php echo $batch->expert_analysis_email_sent ? '✅ Yes' : '❌ No'; ?></td>
+                        <td>
+                            <a href="<?php echo home_url('/airbnb-analysis-results/?id=' . $batch->snapshot_id); ?>" target="_blank" class="button button-small">View Results</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+        <?php endif; ?>
+        
         <?php if ($pending_requests > 0): ?>
-        <div style="margin: 30px 0; padding: 20px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
-            <h2 style="margin: 0 0 15px 0;">⚠️ Process Pending Requests</h2>
-            <p>You have <strong><?php echo $pending_requests; ?></strong> pending request(s) that need processing. These may be from cache clears or incomplete analyses.</p>
+        <h2 style="margin-top: 40px;">⚠️ Legacy Processing</h2>
+        <div style="margin: 20px 0; padding: 20px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
+            <h4 style="margin: 0 0 15px 0;">Process Pending Requests</h4>
+            <p>You have <strong><?php echo $pending_requests; ?></strong> pending legacy request(s) that need processing. These may be from cache clears or incomplete analyses.</p>
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="margin: 15px 0;">
                 <input type="hidden" name="action" value="airbnb_analyzer_process_pending">
                 <?php wp_nonce_field('airbnb_analyzer_process_pending', 'process_pending_nonce'); ?>

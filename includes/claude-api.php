@@ -619,4 +619,175 @@ Format your response as JSON with these fields:
         'status' => 'error',
         'message' => 'Could not parse Claude response'
     );
+}
+
+/**
+ * Create a Claude batch for expert analysis
+ * 
+ * @param string $snapshot_id The snapshot ID for tracking
+ * @param string $prompt The expert analysis prompt
+ * @return array|WP_Error The batch creation response or error
+ */
+function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
+    $api_key = get_option('airbnb_analyzer_claude_api_key');
+    
+    if (empty($api_key)) {
+        return new WP_Error('missing_api_key', 'Claude API key is not configured. Please set it in the settings page.');
+    }
+    
+    $url = 'https://api.anthropic.com/v1/messages/batches';
+    
+    $batch_request = array(
+        'requests' => array(
+            array(
+                'custom_id' => 'expert_analysis_' . $snapshot_id,
+                'params' => array(
+                    'model' => 'claude-3-5-sonnet-20241022', // Use latest Sonnet model
+                    'max_tokens' => 50000, // Much higher token limit for comprehensive analysis
+                    'messages' => array(
+                        array(
+                            'role' => 'user',
+                            'content' => $prompt
+                        )
+                    )
+                )
+            )
+        )
+    );
+    
+    $args = array(
+        'method' => 'POST',
+        'headers' => array(
+            'Content-Type' => 'application/json',
+            'x-api-key' => $api_key,
+            'anthropic-version' => '2023-06-01'
+        ),
+        'body' => json_encode($batch_request),
+        'timeout' => 60
+    );
+    
+    $response = wp_remote_post($url, $args);
+    
+    if (is_wp_error($response)) {
+        return $response;
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        $body = wp_remote_retrieve_body($response);
+        $error_data = json_decode($body, true);
+        $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
+        
+        return new WP_Error('batch_creation_error', 'Error creating Claude batch (' . $status_code . '): ' . $error_message);
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return new WP_Error('json_error', 'Error parsing Claude batch response: ' . json_last_error_msg());
+    }
+    
+    return $data;
+}
+
+/**
+ * Check the status of a Claude batch
+ * 
+ * @param string $batch_id The batch ID to check
+ * @return array|WP_Error The batch status response or error
+ */
+function airbnb_analyzer_check_claude_batch_status($batch_id) {
+    $api_key = get_option('airbnb_analyzer_claude_api_key');
+    
+    if (empty($api_key)) {
+        return new WP_Error('missing_api_key', 'Claude API key is not configured.');
+    }
+    
+    $url = 'https://api.anthropic.com/v1/messages/batches/' . $batch_id;
+    
+    $args = array(
+        'method' => 'GET',
+        'headers' => array(
+            'x-api-key' => $api_key,
+            'anthropic-version' => '2023-06-01'
+        ),
+        'timeout' => 30
+    );
+    
+    $response = wp_remote_get($url, $args);
+    
+    if (is_wp_error($response)) {
+        return $response;
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        $body = wp_remote_retrieve_body($response);
+        $error_data = json_decode($body, true);
+        $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
+        
+        return new WP_Error('batch_status_error', 'Error checking batch status (' . $status_code . '): ' . $error_message);
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return new WP_Error('json_error', 'Error parsing batch status response: ' . json_last_error_msg());
+    }
+    
+    return $data;
+}
+
+/**
+ * Retrieve Claude batch results
+ * 
+ * @param string $results_url The results URL from the batch
+ * @return array|WP_Error The batch results or error
+ */
+function airbnb_analyzer_retrieve_claude_batch_results($results_url) {
+    $api_key = get_option('airbnb_analyzer_claude_api_key');
+    
+    if (empty($api_key)) {
+        return new WP_Error('missing_api_key', 'Claude API key is not configured.');
+    }
+    
+    $args = array(
+        'method' => 'GET',
+        'headers' => array(
+            'x-api-key' => $api_key,
+            'anthropic-version' => '2023-06-01'
+        ),
+        'timeout' => 60
+    );
+    
+    $response = wp_remote_get($results_url, $args);
+    
+    if (is_wp_error($response)) {
+        return $response;
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        $body = wp_remote_retrieve_body($response);
+        return new WP_Error('batch_results_error', 'Error retrieving batch results (' . $status_code . '): ' . $body);
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    
+    // Parse JSONL format (each line is a separate JSON object)
+    $lines = explode("\n", trim($body));
+    $results = array();
+    
+    foreach ($lines as $line) {
+        if (trim($line)) {
+            $result = json_decode($line, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $results[] = $result;
+            }
+        }
+    }
+    
+    return $results;
 } 

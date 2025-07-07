@@ -620,8 +620,8 @@ if (!$is_shortcode_mode): ?>
         <div id="expert-analysis-loading" style="display: none; margin-top: 20px;">
             <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
             <p style="margin-top: 15px; font-size: 1.1em;">
-                Analyzing your listing with AI...<br>
-                <small style="opacity: 0.8;">This may take 1-3 minutes for comprehensive analysis</small>
+                Submitting your analysis for processing...<br>
+                <small style="opacity: 0.8;">This uses advanced AI batch processing for comprehensive results</small>
             </p>
         </div>
         
@@ -844,6 +844,9 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-results').hide();
         $('#expert-analysis-loading').show();
         
+        // Update loading message for async processing
+        $('#expert-analysis-loading p').html('Submitting your analysis for processing...<br><small style="opacity: 0.8;">This uses advanced AI batch processing for comprehensive results</small>');
+        
         // Reset button text and styling for next time
         $('#expert-analysis-btn').text('🚀 Generate Expert Analysis').removeClass('expert-analysis-button-regenerate').addClass('expert-analysis-button');
         
@@ -856,24 +859,121 @@ jQuery(document).ready(function($) {
                 nonce: airbnb_analyzer_ajax.nonce,
                 snapshot_id: snapshotId
             },
-            timeout: 180000, // 3 minutes timeout for AI processing (increased)
+            timeout: 60000, // 1 minute timeout for submission
             success: function(response) {
-                $('#expert-analysis-loading').hide();
-                
                 if (response.success) {
-                    displayExpertAnalysis(response.data);
+                    if (response.data.status === 'completed') {
+                        // Analysis already exists
+                        $('#expert-analysis-loading').hide();
+                        displayExpertAnalysis(response.data);
+                    } else if (response.data.status === 'processing') {
+                        // Batch submitted successfully, start polling
+                        startPolling(snapshotId, response.data.batch_id);
+                    } else {
+                        $('#expert-analysis-loading').hide();
+                        showError('Unexpected response status: ' + response.data.status);
+                    }
                 } else {
-                    showError(response.data.message || 'Expert analysis failed. Please try again.');
+                    $('#expert-analysis-loading').hide();
+                    showError(response.data.message || 'Failed to submit expert analysis request.');
                 }
             },
             error: function(xhr, status, error) {
                 $('#expert-analysis-loading').hide();
                 
                 if (status === 'timeout') {
-                    showError('The analysis is taking longer than expected (over 3 minutes). This can happen with very complex listings. Please try again, or contact support if the issue persists.');
+                    showError('Request timed out. Please try again.');
                 } else {
                     showError('Network error occurred. Please check your connection and try again.');
                 }
+            }
+        });
+    }
+    
+    function startPolling(snapshotId, batchId) {
+        // Update UI for processing state
+        $('#expert-analysis-loading p').html('Your expert analysis is being processed...<br><small style="opacity: 0.8;">This can take up to 24 hours, but often completes much sooner. You will receive an email when ready.</small>');
+        
+        // Add a "Check Status" button
+        if (!$('#expert-analysis-check-status').length) {
+            $('#expert-analysis-loading').append(
+                '<button id="expert-analysis-check-status" style="margin-top: 15px; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.8); color: white; padding: 10px 20px; border-radius: 20px; cursor: pointer;">Check Status</button>'
+            );
+        }
+        
+        // Handle manual status check
+        $('#expert-analysis-check-status').off('click').on('click', function() {
+            checkAnalysisStatus(snapshotId);
+        });
+        
+        // Start automatic polling (every 2 minutes for first 10 minutes, then every 10 minutes)
+        let pollCount = 0;
+        let pollInterval = setInterval(function() {
+            pollCount++;
+            checkAnalysisStatus(snapshotId, function(completed) {
+                if (completed) {
+                    clearInterval(pollInterval);
+                } else if (pollCount >= 5) {
+                    // After 5 polls (10 minutes), switch to slower polling
+                    clearInterval(pollInterval);
+                    pollInterval = setInterval(function() {
+                        checkAnalysisStatus(snapshotId, function(completed) {
+                            if (completed) {
+                                clearInterval(pollInterval);
+                            }
+                        });
+                    }, 600000); // Check every 10 minutes
+                }
+            });
+        }, 120000); // Check every 2 minutes initially
+    }
+    
+    function checkAnalysisStatus(snapshotId, callback) {
+        $.ajax({
+            url: airbnb_analyzer_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'check_expert_analysis_status',
+                nonce: airbnb_analyzer_ajax.nonce,
+                snapshot_id: snapshotId
+            },
+            timeout: 30000,
+            success: function(response) {
+                if (response.success) {
+                    const status = response.data.status;
+                    
+                    if (status === 'completed') {
+                        // Analysis is ready!
+                        $('#expert-analysis-loading').hide();
+                        displayExpertAnalysis(response.data);
+                        
+                        // Show notification
+                        showSuccessNotification('Your expert analysis is ready!');
+                        
+                        if (callback) callback(true);
+                    } else if (status === 'processing_results') {
+                        // Results are being processed
+                        $('#expert-analysis-loading p').html('Analysis completed! Processing results...<br><small style="opacity: 0.8;">Almost done, this will just take a moment</small>');
+                        
+                        // Check again in 10 seconds
+                        setTimeout(function() {
+                            checkAnalysisStatus(snapshotId, callback);
+                        }, 10000);
+                    } else {
+                        // Still processing
+                        const message = response.data.message || 'Processing...';
+                        $('#expert-analysis-loading p').html(message + '<br><small style="opacity: 0.8;">You will receive an email when ready</small>');
+                        
+                        if (callback) callback(false);
+                    }
+                } else {
+                    console.error('Status check failed:', response.data.message);
+                    if (callback) callback(false);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Status check error:', status, error);
+                if (callback) callback(false);
             }
         });
     }
@@ -913,6 +1013,16 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-timestamp').text(formatTimestamp(analysis.generated_at));
         $('#expert-analysis-model').text(analysis.model_used || 'Claude AI');
         
+        // Add batch processing indicator
+        if (analysis.batch_processing) {
+            $('#expert-analysis-model').text($('#expert-analysis-model').text() + ' (Batch API)');
+        }
+        
+        // Show token usage if available
+        if (analysis.output_tokens) {
+            $('#expert-analysis-model').text($('#expert-analysis-model').text() + ' • ' + number_format(analysis.output_tokens) + ' tokens');
+        }
+        
         if (isCached) {
             $('#expert-analysis-badge').html('📋 Cached Result');
             $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Cached (previously generated)');
@@ -935,11 +1045,28 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-btn').show();
     }
     
+    function showSuccessNotification(message) {
+        // Create a success notification
+        const notification = $('<div style="position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 15px 20px; border-radius: 5px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">' + message + '</div>');
+        $('body').append(notification);
+        
+        // Remove after 5 seconds
+        setTimeout(function() {
+            notification.fadeOut(500, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+    
     function formatTimestamp(timestamp) {
         if (!timestamp) return 'Unknown';
         
         const date = new Date(timestamp);
         return date.toLocaleString();
+    }
+    
+    function number_format(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
 });
 </script>
@@ -998,6 +1125,9 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-results').hide();
         $('#expert-analysis-loading').show();
         
+        // Update loading message for async processing
+        $('#expert-analysis-loading p').html('Submitting your analysis for processing...<br><small style="opacity: 0.8;">This uses advanced AI batch processing for comprehensive results</small>');
+        
         // Reset button text and styling for next time
         $('#expert-analysis-btn').text('🚀 Generate Expert Analysis').removeClass('expert-analysis-button-regenerate').addClass('expert-analysis-button');
         
@@ -1010,24 +1140,121 @@ jQuery(document).ready(function($) {
                 nonce: airbnb_analyzer_ajax.nonce,
                 snapshot_id: snapshotId
             },
-            timeout: 180000, // 3 minutes timeout for AI processing (increased)
+            timeout: 60000, // 1 minute timeout for submission
             success: function(response) {
-                $('#expert-analysis-loading').hide();
-                
                 if (response.success) {
-                    displayExpertAnalysis(response.data);
+                    if (response.data.status === 'completed') {
+                        // Analysis already exists
+                        $('#expert-analysis-loading').hide();
+                        displayExpertAnalysis(response.data);
+                    } else if (response.data.status === 'processing') {
+                        // Batch submitted successfully, start polling
+                        startPolling(snapshotId, response.data.batch_id);
+                    } else {
+                        $('#expert-analysis-loading').hide();
+                        showError('Unexpected response status: ' + response.data.status);
+                    }
                 } else {
-                    showError(response.data.message || 'Expert analysis failed. Please try again.');
+                    $('#expert-analysis-loading').hide();
+                    showError(response.data.message || 'Failed to submit expert analysis request.');
                 }
             },
             error: function(xhr, status, error) {
                 $('#expert-analysis-loading').hide();
                 
                 if (status === 'timeout') {
-                    showError('The analysis is taking longer than expected (over 3 minutes). This can happen with very complex listings. Please try again, or contact support if the issue persists.');
+                    showError('Request timed out. Please try again.');
                 } else {
                     showError('Network error occurred. Please check your connection and try again.');
                 }
+            }
+        });
+    }
+    
+    function startPolling(snapshotId, batchId) {
+        // Update UI for processing state
+        $('#expert-analysis-loading p').html('Your expert analysis is being processed...<br><small style="opacity: 0.8;">This can take up to 24 hours, but often completes much sooner. You will receive an email when ready.</small>');
+        
+        // Add a "Check Status" button
+        if (!$('#expert-analysis-check-status').length) {
+            $('#expert-analysis-loading').append(
+                '<button id="expert-analysis-check-status" style="margin-top: 15px; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.8); color: white; padding: 10px 20px; border-radius: 20px; cursor: pointer;">Check Status</button>'
+            );
+        }
+        
+        // Handle manual status check
+        $('#expert-analysis-check-status').off('click').on('click', function() {
+            checkAnalysisStatus(snapshotId);
+        });
+        
+        // Start automatic polling (every 2 minutes for first 10 minutes, then every 10 minutes)
+        let pollCount = 0;
+        let pollInterval = setInterval(function() {
+            pollCount++;
+            checkAnalysisStatus(snapshotId, function(completed) {
+                if (completed) {
+                    clearInterval(pollInterval);
+                } else if (pollCount >= 5) {
+                    // After 5 polls (10 minutes), switch to slower polling
+                    clearInterval(pollInterval);
+                    pollInterval = setInterval(function() {
+                        checkAnalysisStatus(snapshotId, function(completed) {
+                            if (completed) {
+                                clearInterval(pollInterval);
+                            }
+                        });
+                    }, 600000); // Check every 10 minutes
+                }
+            });
+        }, 120000); // Check every 2 minutes initially
+    }
+    
+    function checkAnalysisStatus(snapshotId, callback) {
+        $.ajax({
+            url: airbnb_analyzer_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'check_expert_analysis_status',
+                nonce: airbnb_analyzer_ajax.nonce,
+                snapshot_id: snapshotId
+            },
+            timeout: 30000,
+            success: function(response) {
+                if (response.success) {
+                    const status = response.data.status;
+                    
+                    if (status === 'completed') {
+                        // Analysis is ready!
+                        $('#expert-analysis-loading').hide();
+                        displayExpertAnalysis(response.data);
+                        
+                        // Show notification
+                        showSuccessNotification('Your expert analysis is ready!');
+                        
+                        if (callback) callback(true);
+                    } else if (status === 'processing_results') {
+                        // Results are being processed
+                        $('#expert-analysis-loading p').html('Analysis completed! Processing results...<br><small style="opacity: 0.8;">Almost done, this will just take a moment</small>');
+                        
+                        // Check again in 10 seconds
+                        setTimeout(function() {
+                            checkAnalysisStatus(snapshotId, callback);
+                        }, 10000);
+                    } else {
+                        // Still processing
+                        const message = response.data.message || 'Processing...';
+                        $('#expert-analysis-loading p').html(message + '<br><small style="opacity: 0.8;">You will receive an email when ready</small>');
+                        
+                        if (callback) callback(false);
+                    }
+                } else {
+                    console.error('Status check failed:', response.data.message);
+                    if (callback) callback(false);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Status check error:', status, error);
+                if (callback) callback(false);
             }
         });
     }
@@ -1067,6 +1294,16 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-timestamp').text(formatTimestamp(analysis.generated_at));
         $('#expert-analysis-model').text(analysis.model_used || 'Claude AI');
         
+        // Add batch processing indicator
+        if (analysis.batch_processing) {
+            $('#expert-analysis-model').text($('#expert-analysis-model').text() + ' (Batch API)');
+        }
+        
+        // Show token usage if available
+        if (analysis.output_tokens) {
+            $('#expert-analysis-model').text($('#expert-analysis-model').text() + ' • ' + number_format(analysis.output_tokens) + ' tokens');
+        }
+        
         if (isCached) {
             $('#expert-analysis-badge').html('📋 Cached Result');
             $('#expert-analysis-cached-indicator').html('<strong>Source:</strong> Cached (previously generated)');
@@ -1077,7 +1314,7 @@ jQuery(document).ready(function($) {
         
         $('#expert-analysis-results').show();
         
-        // Scroll to results smoothly
+        // Scroll to results
         $('html, body').animate({
             scrollTop: $('#expert-analysis-results').offset().top - 20
         }, 500);
@@ -1089,11 +1326,28 @@ jQuery(document).ready(function($) {
         $('#expert-analysis-btn').show();
     }
     
+    function showSuccessNotification(message) {
+        // Create a success notification
+        const notification = $('<div style="position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 15px 20px; border-radius: 5px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">' + message + '</div>');
+        $('body').append(notification);
+        
+        // Remove after 5 seconds
+        setTimeout(function() {
+            notification.fadeOut(500, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+    
     function formatTimestamp(timestamp) {
         if (!timestamp) return 'Unknown';
         
         const date = new Date(timestamp);
         return date.toLocaleString();
+    }
+    
+    function number_format(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
 });
 </script>
