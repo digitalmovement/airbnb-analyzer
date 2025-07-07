@@ -638,15 +638,14 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     error_log('CLAUDE_DEBUG: Creating batch for snapshot ' . $snapshot_id);
     
     // Test API key with a simple request first (optional verification)
-    // Temporarily disabled to avoid potential issues during batch creation
-    // if (get_option('airbnb_analyzer_verify_claude_api', true)) {
-    //     $test_response = airbnb_analyzer_test_claude_api_key($api_key);
-    //     if (is_wp_error($test_response)) {
-    //         error_log('CLAUDE_DEBUG: API key test failed: ' . $test_response->get_error_message());
-    //         return $test_response;
-    //     }
-    //     error_log('CLAUDE_DEBUG: API key test passed');
-    // }
+    if (get_option('airbnb_analyzer_verify_claude_api', true)) {
+        $test_response = airbnb_analyzer_test_claude_api_key($api_key);
+        if (is_wp_error($test_response)) {
+            error_log('CLAUDE_DEBUG: API key test failed: ' . $test_response->get_error_message());
+            return $test_response;
+        }
+        error_log('CLAUDE_DEBUG: API key test passed');
+    }
     
     $url = 'https://api.anthropic.com/v1/messages/batches';
     
@@ -655,8 +654,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
             array(
                 'custom_id' => 'expert_analysis_' . $snapshot_id,
                 'params' => array(
-                    'model' => 'claude-3-sonnet-20240229', // Use Claude 3 Sonnet - stable for batch processing
-                    'max_tokens' => 4096, // Conservative but reliable token limit
+                    'model' => 'claude-3-5-sonnet-20240620', // Use Claude 3.5 Sonnet - supports batching
+                    'max_tokens' => 4096, // Well within the 8192 limit for this model
                     'messages' => array(
                         array(
                             'role' => 'user',
@@ -669,7 +668,7 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     );
     
     error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
-    error_log('CLAUDE_DEBUG: Using model: claude-3-sonnet-20240229, max_tokens: 4096');
+    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet-20240620, max_tokens: 4096');
     error_log('CLAUDE_DEBUG: Prompt preview (first 500 chars): ' . substr($prompt, 0, 500));
     
     $args = array(
@@ -856,7 +855,7 @@ function airbnb_analyzer_test_claude_api_key($api_key) {
     $url = 'https://api.anthropic.com/v1/messages';
     
     $test_request = array(
-        'model' => 'claude-3-sonnet-20240229',
+        'model' => 'claude-3-5-sonnet-20240620',
         'max_tokens' => 10,
         'messages' => array(
             array(
