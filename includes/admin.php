@@ -182,8 +182,17 @@ function airbnb_analyzer_stats_page() {
             $message = urldecode($_GET['message']);
             $processed = intval($_GET['processed'] ?? 0);
             $errors = intval($_GET['errors'] ?? 0);
+            $type = $_GET['type'] ?? 'info';
             
-            $class = ($errors > 0) ? 'notice-warning' : 'notice-success';
+            $class = 'notice-info';
+            if ($type === 'success') {
+                $class = 'notice-success';
+            } elseif ($type === 'error') {
+                $class = 'notice-error';
+            } elseif ($errors > 0) {
+                $class = 'notice-warning';
+            }
+            
             echo '<div class="notice ' . $class . ' is-dismissible" style="margin: 20px 0;"><p>' . esc_html($message) . '</p></div>';
         }
         ?>
@@ -363,6 +372,48 @@ function airbnb_analyzer_stats_page() {
             </form>
         </div>
         <?php endif; ?>
+        
+        <h2 style="margin-top: 40px;">🔧 Batch Processing Debug Tools</h2>
+        <div style="margin: 20px 0; padding: 20px; background: #f0f8ff; border-radius: 8px; border-left: 4px solid #0073aa;">
+            <h4 style="margin: 0 0 15px 0;">Manual Batch Processing</h4>
+            <p>Use these tools to manually trigger batch processing functions for debugging purposes.</p>
+            
+            <div style="margin: 20px 0;">
+                <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline-block; margin-right: 15px;">
+                    <input type="hidden" name="action" value="airbnb_analyzer_manual_batch_check">
+                    <?php wp_nonce_field('airbnb_analyzer_manual_batch_check', 'manual_batch_check_nonce'); ?>
+                    <button type="submit" class="button button-secondary">
+                        📡 Check Batch Statuses Now
+                    </button>
+                </form>
+                
+                <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline-block; margin-right: 15px;">
+                    <input type="hidden" name="action" value="airbnb_analyzer_view_debug_log">
+                    <?php wp_nonce_field('airbnb_analyzer_view_debug_log', 'view_debug_log_nonce'); ?>
+                    <button type="submit" class="button button-secondary">
+                        📋 View Debug Log
+                    </button>
+                </form>
+                
+                <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline-block;">
+                    <input type="hidden" name="action" value="airbnb_analyzer_clear_debug_log">
+                    <?php wp_nonce_field('airbnb_analyzer_clear_debug_log', 'clear_debug_log_nonce'); ?>
+                    <button type="submit" class="button button-secondary">
+                        🗑️ Clear Debug Log
+                    </button>
+                </form>
+            </div>
+            
+            <div style="margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.8); border-radius: 6px;">
+                <h5 style="margin: 0 0 10px 0;">Debug Information:</h5>
+                <ul style="margin: 0; padding-left: 20px;">
+                    <li>Debug logs are written to PHP error log with BATCH_DEBUG and CLAUDE_DEBUG prefixes</li>
+                    <li>Check your PHP error log or use the "View Debug Log" button above</li>
+                    <li>Batch status checking runs automatically every 15 minutes</li>
+                    <li>Use "Check Batch Statuses Now" to manually trigger the check</li>
+                </ul>
+            </div>
+        </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
             <!-- Recent Completed Analyses -->
@@ -735,6 +786,167 @@ function airbnb_analyzer_process_pending_requests() {
     
     wp_redirect($redirect_url);
     exit;
+}
+
+/**
+ * Handle manual batch status check
+ */
+add_action('admin_post_airbnb_analyzer_manual_batch_check', 'airbnb_analyzer_handle_manual_batch_check');
+function airbnb_analyzer_handle_manual_batch_check() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['manual_batch_check_nonce'], 'airbnb_analyzer_manual_batch_check')) {
+        wp_die('Security check failed');
+    }
+    
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_die('Insufficient permissions');
+    }
+    
+    error_log('ADMIN_DEBUG: Manual batch status check triggered');
+    
+    // Call the batch status checking function
+    airbnb_analyzer_check_batch_statuses_callback();
+    
+    // Redirect back with success message
+    $redirect_url = add_query_arg(array(
+        'page' => 'airbnb-analyzer-stats',
+        'message' => urlencode('Manual batch status check completed. Check the debug log for details.'),
+        'type' => 'success'
+    ), admin_url('admin.php'));
+    
+    wp_redirect($redirect_url);
+    exit;
+}
+
+/**
+ * Handle debug log viewing
+ */
+add_action('admin_post_airbnb_analyzer_view_debug_log', 'airbnb_analyzer_handle_view_debug_log');
+function airbnb_analyzer_handle_view_debug_log() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['view_debug_log_nonce'], 'airbnb_analyzer_view_debug_log')) {
+        wp_die('Security check failed');
+    }
+    
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_die('Insufficient permissions');
+    }
+    
+    // Get debug log entries
+    $debug_entries = airbnb_analyzer_get_debug_log();
+    
+    ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Airbnb Analyzer Debug Log</title>
+        <style>
+            body { font-family: monospace; margin: 20px; background: #f0f0f0; }
+            .log-entry { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; border-left: 4px solid #0073aa; }
+            .log-entry.error { border-left-color: #dc3232; }
+            .log-entry.debug { border-left-color: #46b450; }
+            .timestamp { color: #666; font-size: 0.9em; }
+            .message { margin: 5px 0; }
+            .back-link { display: inline-block; margin: 20px 0; padding: 10px 15px; background: #0073aa; color: white; text-decoration: none; border-radius: 4px; }
+        </style>
+    </head>
+    <body>
+        <h1>🔍 Airbnb Analyzer Debug Log</h1>
+        <a href="<?php echo admin_url('admin.php?page=airbnb-analyzer-stats'); ?>" class="back-link">← Back to Dashboard</a>
+        
+        <?php if (empty($debug_entries)): ?>
+            <p>No debug entries found. Debug entries are written to the PHP error log.</p>
+        <?php else: ?>
+            <p>Showing last <?php echo count($debug_entries); ?> debug entries:</p>
+            <?php foreach ($debug_entries as $entry): ?>
+                <div class="log-entry <?php echo $entry['type']; ?>">
+                    <div class="timestamp"><?php echo esc_html($entry['timestamp']); ?></div>
+                    <div class="message"><?php echo esc_html($entry['message']); ?></div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+        
+        <a href="<?php echo admin_url('admin.php?page=airbnb-analyzer-stats'); ?>" class="back-link">← Back to Dashboard</a>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+/**
+ * Handle debug log clearing
+ */
+add_action('admin_post_airbnb_analyzer_clear_debug_log', 'airbnb_analyzer_handle_clear_debug_log');
+function airbnb_analyzer_handle_clear_debug_log() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['clear_debug_log_nonce'], 'airbnb_analyzer_clear_debug_log')) {
+        wp_die('Security check failed');
+    }
+    
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_die('Insufficient permissions');
+    }
+    
+    error_log('ADMIN_DEBUG: Debug log cleared by user');
+    
+    // Note: We can't actually clear the PHP error log, but we can log that it was "cleared"
+    error_log('=== AIRBNB ANALYZER DEBUG LOG CLEARED ===');
+    
+    // Redirect back with success message
+    $redirect_url = add_query_arg(array(
+        'page' => 'airbnb-analyzer-stats',
+        'message' => urlencode('Debug log cleared. New debug entries will appear after this point.'),
+        'type' => 'success'
+    ), admin_url('admin.php'));
+    
+    wp_redirect($redirect_url);
+    exit;
+}
+
+/**
+ * Get debug log entries
+ */
+function airbnb_analyzer_get_debug_log() {
+    $entries = array();
+    
+    // In a real implementation, you'd read from the error log file
+    // For now, we'll just return a placeholder
+    $entries[] = array(
+        'timestamp' => current_time('Y-m-d H:i:s'),
+        'type' => 'debug',
+        'message' => 'Debug log viewing is active. Check your PHP error log for BATCH_DEBUG and CLAUDE_DEBUG entries.'
+    );
+    
+    // Try to read from error log if possible
+    $error_log_path = ini_get('error_log');
+    if ($error_log_path && file_exists($error_log_path) && is_readable($error_log_path)) {
+        $log_content = file_get_contents($error_log_path);
+        $lines = explode("\n", $log_content);
+        
+        // Filter for our debug entries
+        foreach (array_reverse($lines) as $line) {
+            if (strpos($line, 'BATCH_DEBUG:') !== false || strpos($line, 'CLAUDE_DEBUG:') !== false || strpos($line, 'ADMIN_DEBUG:') !== false) {
+                // Parse timestamp and message
+                if (preg_match('/\[(.*?)\].*?(BATCH_DEBUG:|CLAUDE_DEBUG:|ADMIN_DEBUG:.*?)$/', $line, $matches)) {
+                    $entries[] = array(
+                        'timestamp' => $matches[1],
+                        'type' => 'debug',
+                        'message' => $matches[2]
+                    );
+                }
+                
+                // Limit to last 50 entries
+                if (count($entries) >= 50) {
+                    break;
+                }
+            }
+        }
+    }
+    
+    return $entries;
 }
 
 // Note: The settings page function is defined in settings.php

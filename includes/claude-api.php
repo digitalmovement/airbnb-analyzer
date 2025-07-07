@@ -635,6 +635,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
         return new WP_Error('missing_api_key', 'Claude API key is not configured. Please set it in the settings page.');
     }
     
+    error_log('CLAUDE_DEBUG: Creating batch for snapshot ' . $snapshot_id);
+    
     $url = 'https://api.anthropic.com/v1/messages/batches';
     
     $batch_request = array(
@@ -655,6 +657,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
         )
     );
     
+    error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
+    
     $args = array(
         'method' => 'POST',
         'headers' => array(
@@ -669,24 +673,32 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     $response = wp_remote_post($url, $args);
     
     if (is_wp_error($response)) {
+        error_log('CLAUDE_DEBUG: HTTP error creating batch: ' . $response->get_error_message());
         return $response;
     }
     
     $status_code = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    
+    error_log('CLAUDE_DEBUG: Batch creation response status: ' . $status_code);
+    
     if ($status_code !== 200) {
-        $body = wp_remote_retrieve_body($response);
+        error_log('CLAUDE_DEBUG: Batch creation failed with status ' . $status_code . ': ' . $body);
+        
         $error_data = json_decode($body, true);
         $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
         
         return new WP_Error('batch_creation_error', 'Error creating Claude batch (' . $status_code . '): ' . $error_message);
     }
     
-    $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
     
     if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log('CLAUDE_DEBUG: JSON parsing error: ' . json_last_error_msg());
         return new WP_Error('json_error', 'Error parsing Claude batch response: ' . json_last_error_msg());
     }
+    
+    error_log('CLAUDE_DEBUG: Successfully created batch with ID: ' . ($data['id'] ?? 'unknown'));
     
     return $data;
 }
@@ -704,6 +716,8 @@ function airbnb_analyzer_check_claude_batch_status($batch_id) {
         return new WP_Error('missing_api_key', 'Claude API key is not configured.');
     }
     
+    error_log('CLAUDE_DEBUG: Checking status for batch ' . $batch_id);
+    
     $url = 'https://api.anthropic.com/v1/messages/batches/' . $batch_id;
     
     $args = array(
@@ -718,23 +732,36 @@ function airbnb_analyzer_check_claude_batch_status($batch_id) {
     $response = wp_remote_get($url, $args);
     
     if (is_wp_error($response)) {
+        error_log('CLAUDE_DEBUG: HTTP error checking batch status: ' . $response->get_error_message());
         return $response;
     }
     
     $status_code = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    
+    error_log('CLAUDE_DEBUG: Batch status response code: ' . $status_code);
+    
     if ($status_code !== 200) {
-        $body = wp_remote_retrieve_body($response);
+        error_log('CLAUDE_DEBUG: Batch status check failed with status ' . $status_code . ': ' . $body);
+        
         $error_data = json_decode($body, true);
         $error_message = isset($error_data['error']['message']) ? $error_data['error']['message'] : 'Unknown API error';
         
         return new WP_Error('batch_status_error', 'Error checking batch status (' . $status_code . '): ' . $error_message);
     }
     
-    $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
     
     if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log('CLAUDE_DEBUG: JSON parsing error in status check: ' . json_last_error_msg());
         return new WP_Error('json_error', 'Error parsing batch status response: ' . json_last_error_msg());
+    }
+    
+    $processing_status = $data['processing_status'] ?? 'unknown';
+    error_log('CLAUDE_DEBUG: Batch ' . $batch_id . ' status: ' . $processing_status);
+    
+    if (isset($data['results_url'])) {
+        error_log('CLAUDE_DEBUG: Batch ' . $batch_id . ' has results URL: ' . $data['results_url']);
     }
     
     return $data;
@@ -753,6 +780,8 @@ function airbnb_analyzer_retrieve_claude_batch_results($results_url) {
         return new WP_Error('missing_api_key', 'Claude API key is not configured.');
     }
     
+    error_log('CLAUDE_DEBUG: Retrieving batch results from: ' . $results_url);
+    
     $args = array(
         'method' => 'GET',
         'headers' => array(
@@ -765,29 +794,41 @@ function airbnb_analyzer_retrieve_claude_batch_results($results_url) {
     $response = wp_remote_get($results_url, $args);
     
     if (is_wp_error($response)) {
+        error_log('CLAUDE_DEBUG: HTTP error retrieving results: ' . $response->get_error_message());
         return $response;
     }
     
     $status_code = wp_remote_retrieve_response_code($response);
+    $body = wp_remote_retrieve_body($response);
+    
+    error_log('CLAUDE_DEBUG: Results retrieval response code: ' . $status_code);
+    
     if ($status_code !== 200) {
-        $body = wp_remote_retrieve_body($response);
+        error_log('CLAUDE_DEBUG: Results retrieval failed with status ' . $status_code . ': ' . substr($body, 0, 500));
         return new WP_Error('batch_results_error', 'Error retrieving batch results (' . $status_code . '): ' . $body);
     }
     
-    $body = wp_remote_retrieve_body($response);
+    error_log('CLAUDE_DEBUG: Retrieved results, body length: ' . strlen($body) . ' bytes');
     
     // Parse JSONL format (each line is a separate JSON object)
     $lines = explode("\n", trim($body));
     $results = array();
     
-    foreach ($lines as $line) {
+    error_log('CLAUDE_DEBUG: Parsing ' . count($lines) . ' result lines');
+    
+    foreach ($lines as $line_num => $line) {
         if (trim($line)) {
             $result = json_decode($line, true);
             if (json_last_error() === JSON_ERROR_NONE) {
                 $results[] = $result;
+                error_log('CLAUDE_DEBUG: Successfully parsed result line ' . ($line_num + 1) . ' with custom_id: ' . ($result['custom_id'] ?? 'none'));
+            } else {
+                error_log('CLAUDE_DEBUG: Failed to parse result line ' . ($line_num + 1) . ': ' . json_last_error_msg());
             }
         }
     }
+    
+    error_log('CLAUDE_DEBUG: Successfully parsed ' . count($results) . ' results');
     
     return $results;
 } 

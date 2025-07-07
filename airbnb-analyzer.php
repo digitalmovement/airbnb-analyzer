@@ -229,6 +229,9 @@ function airbnb_analyzer_check_batch_statuses_callback() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
     
+    // Log cron execution
+    error_log('BATCH_DEBUG: Checking batch statuses cron job started');
+    
     // Get all requests with pending batch processing
     $pending_batches = $wpdb->get_results(
         "SELECT snapshot_id, expert_batch_id, expert_batch_submitted_at 
@@ -238,32 +241,45 @@ function airbnb_analyzer_check_batch_statuses_callback() {
          AND expert_batch_submitted_at > DATE_SUB(NOW(), INTERVAL 25 HOUR)"
     );
     
+    error_log('BATCH_DEBUG: Found ' . count($pending_batches) . ' pending batches');
+    
     if (empty($pending_batches)) {
+        error_log('BATCH_DEBUG: No pending batches to check');
         return; // No pending batches to check
     }
     
     // Check each batch status
     foreach ($pending_batches as $batch) {
+        error_log('BATCH_DEBUG: Checking batch ' . $batch->expert_batch_id . ' for snapshot ' . $batch->snapshot_id);
+        
         $batch_status = airbnb_analyzer_check_claude_batch_status($batch->expert_batch_id);
         
         if (is_wp_error($batch_status)) {
             // Log error but continue with other batches
-            error_log('Failed to check batch status for ' . $batch->snapshot_id . ': ' . $batch_status->get_error_message());
+            error_log('BATCH_DEBUG: Failed to check batch status for ' . $batch->snapshot_id . ': ' . $batch_status->get_error_message());
             continue;
         }
         
         $current_status = $batch_status['processing_status'];
+        error_log('BATCH_DEBUG: Batch ' . $batch->expert_batch_id . ' status: ' . $current_status);
         
         // Update database with current status
-        $wpdb->update(
+        $update_result = $wpdb->update(
             $table_name,
             array('expert_batch_status' => $current_status),
             array('snapshot_id' => $batch->snapshot_id)
         );
         
+        if ($update_result === false) {
+            error_log('BATCH_DEBUG: Failed to update batch status in database for ' . $batch->snapshot_id);
+            continue;
+        }
+        
         // If batch is complete, schedule result processing
         if ($current_status === 'ended') {
-            $results_url = $batch_status['results_url'];
+            $results_url = $batch_status['results_url'] ?? null;
+            
+            error_log('BATCH_DEBUG: Batch ' . $batch->expert_batch_id . ' completed with results URL: ' . $results_url);
             
             if ($results_url) {
                 // Store results URL and mark as completed
@@ -276,11 +292,17 @@ function airbnb_analyzer_check_batch_statuses_callback() {
                     array('snapshot_id' => $batch->snapshot_id)
                 );
                 
+                error_log('BATCH_DEBUG: Scheduling result processing for ' . $batch->snapshot_id);
+                
                 // Process results immediately (within 30 seconds)
                 wp_schedule_single_event(time() + 30, 'airbnb_analyzer_process_batch_results', array($batch->snapshot_id));
+            } else {
+                error_log('BATCH_DEBUG: No results URL found for completed batch ' . $batch->expert_batch_id);
             }
         }
     }
+    
+    error_log('BATCH_DEBUG: Batch status checking completed');
 }
 
 function airbnb_analyzer_handle_ajax() {
@@ -482,6 +504,8 @@ function airbnb_analyzer_handle_expert_analysis() {
         wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
     }
     
+    error_log('BATCH_DEBUG: Creating new batch for snapshot ' . $snapshot_id);
+    
     // Optimize the data for Claude
     $optimized_data = optimize_data_for_claude($raw_data);
     
@@ -489,15 +513,20 @@ function airbnb_analyzer_handle_expert_analysis() {
     $expert_prompt = get_expert_analysis_prompt();
     $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . json_encode($optimized_data, JSON_PRETTY_PRINT);
     
+    error_log('BATCH_DEBUG: Prompt length: ' . strlen($full_prompt) . ' characters');
+    
     // Create Claude batch
     $batch_response = airbnb_analyzer_create_claude_batch($snapshot_id, $full_prompt);
     
     if (is_wp_error($batch_response)) {
+        error_log('BATCH_DEBUG: Failed to create batch for ' . $snapshot_id . ': ' . $batch_response->get_error_message());
         wp_send_json_error(array('message' => 'Failed to create expert analysis batch: ' . $batch_response->get_error_message()));
     }
     
     // Update database with batch information
     $batch_id = $batch_response['id'];
+    error_log('BATCH_DEBUG: Created batch ' . $batch_id . ' for snapshot ' . $snapshot_id);
+    
     $update_result = $wpdb->update(
         $table_name,
         array(
@@ -510,8 +539,11 @@ function airbnb_analyzer_handle_expert_analysis() {
     );
     
     if ($update_result === false) {
+        error_log('BATCH_DEBUG: Failed to update database with batch info for ' . $snapshot_id . ': ' . $wpdb->last_error);
         wp_send_json_error(array('message' => 'Failed to update database with batch information.'));
     }
+    
+    error_log('BATCH_DEBUG: Successfully stored batch info for ' . $snapshot_id);
     
     wp_send_json_success(array(
         'status' => 'processing',
@@ -1014,24 +1046,44 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
     global $wpdb;
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
     
+    error_log('BATCH_DEBUG: Processing batch results for snapshot ' . $snapshot_id);
+    
     // Get the request from database
     $request = $wpdb->get_row($wpdb->prepare(
         "SELECT * FROM $table_name WHERE snapshot_id = %s",
         $snapshot_id
     ));
     
-    if (!$request || empty($request->expert_batch_results_url)) {
+    if (!$request) {
+        error_log('BATCH_DEBUG: No request found for snapshot ' . $snapshot_id);
         return false;
     }
+    
+    if (empty($request->expert_batch_results_url)) {
+        error_log('BATCH_DEBUG: No results URL found for snapshot ' . $snapshot_id);
+        return false;
+    }
+    
+    error_log('BATCH_DEBUG: Retrieving results from URL: ' . $request->expert_batch_results_url);
     
     // Retrieve batch results
     $batch_results = airbnb_analyzer_retrieve_claude_batch_results($request->expert_batch_results_url);
     
     if (is_wp_error($batch_results)) {
         // Log error but don't fail completely
-        error_log('Failed to retrieve batch results for ' . $snapshot_id . ': ' . $batch_results->get_error_message());
+        error_log('BATCH_DEBUG: Failed to retrieve batch results for ' . $snapshot_id . ': ' . $batch_results->get_error_message());
+        
+        // Update database with error status
+        $wpdb->update(
+            $table_name,
+            array('expert_batch_status' => 'error'),
+            array('snapshot_id' => $snapshot_id)
+        );
+        
         return false;
     }
+    
+    error_log('BATCH_DEBUG: Retrieved ' . count($batch_results) . ' batch results');
     
     // Find our specific result
     $analysis_result = null;
@@ -1045,14 +1097,19 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
     }
     
     if (!$analysis_result) {
-        error_log('Could not find analysis result for ' . $snapshot_id);
+        error_log('BATCH_DEBUG: Could not find analysis result for custom_id: ' . $custom_id);
+        error_log('BATCH_DEBUG: Available custom_ids: ' . implode(', ', array_column($batch_results, 'custom_id')));
         return false;
     }
+    
+    error_log('BATCH_DEBUG: Found analysis result for ' . $snapshot_id);
     
     // Check if the result was successful
     if ($analysis_result['result']['type'] !== 'succeeded') {
         $error_type = $analysis_result['result']['error']['type'] ?? 'unknown';
         $error_message = $analysis_result['result']['error']['message'] ?? 'Unknown error';
+        
+        error_log('BATCH_DEBUG: Analysis failed - Type: ' . $error_type . ', Message: ' . $error_message);
         
         // Update database with error status
         $wpdb->update(
@@ -1083,9 +1140,12 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
     }
     
     if (empty($analysis_content)) {
-        error_log('No analysis content found for ' . $snapshot_id);
+        error_log('BATCH_DEBUG: No analysis content found for ' . $snapshot_id);
+        error_log('BATCH_DEBUG: Message structure: ' . print_r($message, true));
         return false;
     }
+    
+    error_log('BATCH_DEBUG: Analysis content length: ' . strlen($analysis_content) . ' characters');
     
     // Store the completed analysis
     $expert_analysis_data = array(
@@ -1097,6 +1157,8 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
         'batch_processing' => true
     );
     
+    error_log('BATCH_DEBUG: Storing analysis data with ' . ($expert_analysis_data['output_tokens']) . ' output tokens');
+    
     $update_result = $wpdb->update(
         $table_name,
         array(
@@ -1106,9 +1168,19 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
         array('snapshot_id' => $snapshot_id)
     );
     
-    if ($update_result !== false) {
-        // Send success email
-        airbnb_analyzer_send_expert_analysis_email($request->email, $request->listing_url, $expert_analysis_data, null, $snapshot_id);
+    if ($update_result === false) {
+        error_log('BATCH_DEBUG: Failed to update database with analysis results for ' . $snapshot_id);
+        error_log('BATCH_DEBUG: Database error: ' . $wpdb->last_error);
+        return false;
+    }
+    
+    error_log('BATCH_DEBUG: Successfully stored analysis data for ' . $snapshot_id);
+    
+    // Send success email
+    $email_sent = airbnb_analyzer_send_expert_analysis_email($request->email, $request->listing_url, $expert_analysis_data, null, $snapshot_id);
+    
+    if ($email_sent) {
+        error_log('BATCH_DEBUG: Email sent successfully for ' . $snapshot_id);
         
         // Mark email as sent
         $wpdb->update(
@@ -1116,7 +1188,11 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
             array('expert_analysis_email_sent' => 1),
             array('snapshot_id' => $snapshot_id)
         );
+    } else {
+        error_log('BATCH_DEBUG: Failed to send email for ' . $snapshot_id);
     }
+    
+    error_log('BATCH_DEBUG: Batch result processing completed for ' . $snapshot_id);
     
     return true;
 }
