@@ -23,6 +23,7 @@ require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/settings.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/claude-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/admin.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/expert-analysis-display.php');
 
 // Include notify.php functions for admin processing (but don't execute the handler)
 if (is_admin()) {
@@ -1266,7 +1267,7 @@ function airbnb_analyzer_send_expert_analysis_email($email, $listing_url, $analy
         'Content-Type: text/plain; charset=UTF-8'
     );
     
-    wp_mail($email, $subject, $message, $headers);
+    return wp_mail($email, $subject, $message, $headers);
 }
 
 // Note: The register_settings function is now in includes/settings.php

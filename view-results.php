@@ -1071,6 +1071,63 @@ jQuery(document).ready(function($) {
     function number_format(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
+    
+    // Override displayExpertAnalysis to try enhanced display first
+    const originalDisplayExpertAnalysis = window.displayExpertAnalysis;
+    window.displayExpertAnalysis = function(data) {
+        const analysis = data.analysis;
+        const isCached = data.cached;
+        
+        // Get snapshot ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const snapshotId = urlParams.get('id');
+        
+        if (snapshotId) {
+            // Try to get enhanced HTML format
+            $.ajax({
+                url: airbnb_analyzer_ajax.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'get_enhanced_expert_analysis',
+                    nonce: airbnb_analyzer_ajax.nonce,
+                    snapshot_id: snapshotId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Replace the entire expert analysis section with enhanced HTML
+                        $('#expert-analysis-results').html(response.data.html);
+                        
+                        // Add PDF download and email functionality
+                        initializeReportActions();
+                        
+                        // Show the results
+                        $('#expert-analysis-results').show();
+                        
+                        // Scroll to results
+                        $('html, body').animate({
+                            scrollTop: $('#expert-analysis-results').offset().top - 20
+                        }, 500);
+                    } else {
+                        // Fallback to original function
+                        if (originalDisplayExpertAnalysis) {
+                            originalDisplayExpertAnalysis(data);
+                        }
+                    }
+                },
+                error: function() {
+                    // Fallback to original function
+                    if (originalDisplayExpertAnalysis) {
+                        originalDisplayExpertAnalysis(data);
+                    }
+                }
+            });
+        } else {
+            // No snapshot ID, use original function
+            if (originalDisplayExpertAnalysis) {
+                originalDisplayExpertAnalysis(data);
+            }
+        }
+    };
 });
 </script>
 </body>
@@ -1352,6 +1409,79 @@ jQuery(document).ready(function($) {
     function number_format(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
+    
+    // Enhanced Report Actions for PDF and Email
+    function initializeReportActions() {
+        // PDF Download
+        $(document).off('click', '#download-pdf-btn').on('click', '#download-pdf-btn', function() {
+            const snapshotId = $(this).data('snapshot-id');
+            const $btn = $(this);
+            
+            $btn.prop('disabled', true).html('<span class="btn-icon">⏳</span> Generating PDF...');
+            
+            $.ajax({
+                url: airbnb_analyzer_ajax.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'download_expert_analysis_pdf',
+                    nonce: airbnb_analyzer_ajax.nonce,
+                    snapshot_id: snapshotId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Download the PDF
+                        window.open(response.data.pdf_url, '_blank');
+                        $btn.prop('disabled', false).html('<span class="btn-icon">📄</span> Download PDF Report');
+                    } else {
+                        alert('PDF generation failed: ' + response.data.message);
+                        $btn.prop('disabled', false).html('<span class="btn-icon">📄</span> Download PDF Report');
+                    }
+                },
+                error: function() {
+                    alert('PDF generation failed. Please try again.');
+                    $btn.prop('disabled', false).html('<span class="btn-icon">📄</span> Download PDF Report');
+                }
+            });
+        });
+        
+        // Email Report
+        $(document).off('click', '#email-report-btn').on('click', '#email-report-btn', function() {
+            const snapshotId = $(this).data('snapshot-id');
+            const $btn = $(this);
+            
+            const email = prompt('Enter email address to send the report to (leave blank to use the original email):');
+            if (email === null) return; // User cancelled
+            
+            $btn.prop('disabled', true).html('<span class="btn-icon">⏳</span> Sending...');
+            
+            $.ajax({
+                url: airbnb_analyzer_ajax.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'email_expert_analysis_report',
+                    nonce: airbnb_analyzer_ajax.nonce,
+                    snapshot_id: snapshotId,
+                    email: email
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert('Report sent successfully!');
+                        $btn.prop('disabled', false).html('<span class="btn-icon">✉️</span> Email Report');
+                    } else {
+                        alert('Failed to send report: ' + response.data.message);
+                        $btn.prop('disabled', false).html('<span class="btn-icon">✉️</span> Email Report');
+                    }
+                },
+                error: function() {
+                    alert('Failed to send report. Please try again.');
+                    $btn.prop('disabled', false).html('<span class="btn-icon">✉️</span> Email Report');
+                }
+            });
+        });
+    }
+    
+    // Initialize report actions when document is ready
+    initializeReportActions();
 });
 </script>
 </div><!-- Close .airbnb-analyzer-container for shortcode mode -->
