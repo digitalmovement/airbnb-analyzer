@@ -654,8 +654,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
             array(
                 'custom_id' => 'expert_analysis_' . $snapshot_id,
                 'params' => array(
-                    'model' => 'claude-3-5-sonnet-20240620', // Use Claude 3.5 Sonnet - supports batching
-                    'max_tokens' => 4096, // Well within the 8192 limit for this model
+                    'model' => 'claude-3-7-sonnet-20250219', // Use Claude 3.7 Sonnet - supports batching
+                    'max_tokens' => 20000, // Well within the 8192 limit for this model
                     'messages' => array(
                         array(
                             'role' => 'user',
@@ -668,7 +668,7 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     );
     
     error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
-    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet-20240620, max_tokens: 4096');
+    error_log('CLAUDE_DEBUG: Using model: claude-3-7-sonnet-20250219, max_tokens: 20000');
     error_log('CLAUDE_DEBUG: Prompt preview (first 500 chars): ' . substr($prompt, 0, 500));
     
     $args = array(
