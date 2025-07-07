@@ -637,6 +637,16 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     
     error_log('CLAUDE_DEBUG: Creating batch for snapshot ' . $snapshot_id);
     
+    // Test API key with a simple request first (optional verification)
+    if (get_option('airbnb_analyzer_verify_claude_api', true)) {
+        $test_response = airbnb_analyzer_test_claude_api_key($api_key);
+        if (is_wp_error($test_response)) {
+            error_log('CLAUDE_DEBUG: API key test failed: ' . $test_response->get_error_message());
+            return $test_response;
+        }
+        error_log('CLAUDE_DEBUG: API key test passed');
+    }
+    
     $url = 'https://api.anthropic.com/v1/messages/batches';
     
     $batch_request = array(
@@ -644,8 +654,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
             array(
                 'custom_id' => 'expert_analysis_' . $snapshot_id,
                 'params' => array(
-                    'model' => 'claude-3-5-sonnet-20241022', // Use latest Sonnet model
-                    'max_tokens' => 50000, // Much higher token limit for comprehensive analysis
+                    'model' => 'claude-3-5-sonnet-20240620', // Use stable Sonnet model version
+                    'max_tokens' => 8192, // More conservative token limit for batch processing
                     'messages' => array(
                         array(
                             'role' => 'user',
@@ -658,6 +668,8 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     );
     
     error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
+    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet-20240620, max_tokens: 8192');
+    error_log('CLAUDE_DEBUG: Prompt preview (first 500 chars): ' . substr($prompt, 0, 500));
     
     $args = array(
         'method' => 'POST',
@@ -831,4 +843,55 @@ function airbnb_analyzer_retrieve_claude_batch_results($results_url) {
     error_log('CLAUDE_DEBUG: Successfully parsed ' . count($results) . ' results');
     
     return $results;
+}
+
+/**
+ * Test Claude API key with a simple request
+ * 
+ * @param string $api_key The API key to test
+ * @return bool|WP_Error True if successful, WP_Error if failed
+ */
+function airbnb_analyzer_test_claude_api_key($api_key) {
+    $url = 'https://api.anthropic.com/v1/messages';
+    
+    $test_request = array(
+        'model' => 'claude-3-5-sonnet-20240620',
+        'max_tokens' => 10,
+        'messages' => array(
+            array(
+                'role' => 'user',
+                'content' => 'Test'
+            )
+        )
+    );
+    
+    $args = array(
+        'method' => 'POST',
+        'headers' => array(
+            'Content-Type' => 'application/json',
+            'x-api-key' => $api_key,
+            'anthropic-version' => '2023-06-01'
+        ),
+        'body' => json_encode($test_request),
+        'timeout' => 30
+    );
+    
+    $response = wp_remote_post($url, $args);
+    
+    if (is_wp_error($response)) {
+        return new WP_Error('api_test_failed', 'API connectivity test failed: ' . $response->get_error_message());
+    }
+    
+    $status_code = wp_remote_retrieve_response_code($response);
+    
+    if ($status_code === 200) {
+        return true;
+    } elseif ($status_code === 401) {
+        return new WP_Error('invalid_api_key', 'Claude API key is invalid or expired');
+    } elseif ($status_code === 429) {
+        return new WP_Error('rate_limited', 'Claude API rate limit exceeded');
+    } else {
+        $body = wp_remote_retrieve_body($response);
+        return new WP_Error('api_error', 'Claude API test failed with status ' . $status_code . ': ' . $body);
+    }
 } 

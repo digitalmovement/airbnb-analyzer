@@ -515,6 +515,22 @@ function airbnb_analyzer_handle_expert_analysis() {
     
     error_log('BATCH_DEBUG: Prompt length: ' . strlen($full_prompt) . ' characters');
     
+    // Validate prompt size (Claude has input limits)
+    $max_prompt_length = 180000; // Conservative limit for Claude API (roughly 45k tokens)
+    if (strlen($full_prompt) > $max_prompt_length) {
+        error_log('BATCH_DEBUG: Prompt too long (' . strlen($full_prompt) . ' chars), truncating data');
+        
+        // Truncate the optimized data to fit within limits
+        $data_json = json_encode($optimized_data, JSON_PRETTY_PRINT);
+        $available_space = $max_prompt_length - strlen($expert_prompt) - 100; // Leave some buffer
+        
+        if (strlen($data_json) > $available_space) {
+            $truncated_data = substr($data_json, 0, $available_space - 100) . "\n... [Data truncated due to size limits]";
+            $full_prompt = $expert_prompt . "\n\nJSON Data to Analyze:\n" . $truncated_data;
+            error_log('BATCH_DEBUG: Truncated prompt to ' . strlen($full_prompt) . ' characters');
+        }
+    }
+    
     // Create Claude batch
     $batch_response = airbnb_analyzer_create_claude_batch($snapshot_id, $full_prompt);
     
@@ -1110,6 +1126,7 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
         $error_message = $analysis_result['result']['error']['message'] ?? 'Unknown error';
         
         error_log('BATCH_DEBUG: Analysis failed - Type: ' . $error_type . ', Message: ' . $error_message);
+        error_log('BATCH_DEBUG: Full error structure: ' . print_r($analysis_result['result'], true));
         
         // Update database with error status
         $wpdb->update(
@@ -1120,7 +1137,8 @@ function airbnb_analyzer_process_batch_results_callback($snapshot_id) {
                     'error' => true,
                     'error_type' => $error_type,
                     'error_message' => $error_message,
-                    'generated_at' => current_time('mysql')
+                    'generated_at' => current_time('mysql'),
+                    'full_error' => $analysis_result['result']
                 ))
             ),
             array('snapshot_id' => $snapshot_id)
