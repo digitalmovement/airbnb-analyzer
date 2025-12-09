@@ -590,15 +590,57 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         $house_rules = '';
         if (isset($listing['house_rules'])) {
             if (is_array($listing['house_rules'])) {
-                // New format: {general, aditional}
+                // New format: {general: [{title, values: [{icon, title}]}], aditional: string}
                 $rules_parts = array();
+                
+                // Handle general rules (can be array of rule groups or string)
                 if (!empty($listing['house_rules']['general'])) {
-                    $rules_parts[] = trim($listing['house_rules']['general']);
+                    if (is_array($listing['house_rules']['general'])) {
+                        // Convert array of rule groups to text
+                        $general_parts = array();
+                        foreach ($listing['house_rules']['general'] as $rule_group) {
+                            if (is_array($rule_group) && isset($rule_group['title'])) {
+                                $group_title = $rule_group['title'];
+                                $group_values = array();
+                                
+                                if (isset($rule_group['values']) && is_array($rule_group['values'])) {
+                                    foreach ($rule_group['values'] as $value) {
+                                        if (is_array($value) && isset($value['title'])) {
+                                            $group_values[] = $value['title'];
+                                        } elseif (is_string($value)) {
+                                            $group_values[] = $value;
+                                        }
+                                    }
+                                }
+                                
+                                if (!empty($group_values)) {
+                                    $general_parts[] = $group_title . ': ' . implode(', ', $group_values);
+                                } else {
+                                    $general_parts[] = $group_title;
+                                }
+                            } elseif (is_string($rule_group)) {
+                                $general_parts[] = $rule_group;
+                            }
+                        }
+                        if (!empty($general_parts)) {
+                            $rules_parts[] = implode("\n", $general_parts);
+                        }
+                    } elseif (is_string($listing['house_rules']['general'])) {
+                        $rules_parts[] = trim($listing['house_rules']['general']);
+                    }
                 }
+                
+                // Handle additional rules (usually a string)
                 if (!empty($listing['house_rules']['aditional'])) {
-                    $rules_parts[] = trim($listing['house_rules']['aditional']);
+                    if (is_string($listing['house_rules']['aditional'])) {
+                        $rules_parts[] = trim($listing['house_rules']['aditional']);
+                    } elseif (is_array($listing['house_rules']['aditional'])) {
+                        // If it's an array, convert to string
+                        $rules_parts[] = implode("\n", array_filter($listing['house_rules']['aditional']));
+                    }
                 }
-                $house_rules = implode("\n", array_filter($rules_parts));
+                
+                $house_rules = implode("\n\n", array_filter($rules_parts));
             } elseif (is_string($listing['house_rules'])) {
                 $house_rules = $listing['house_rules'];
             }
