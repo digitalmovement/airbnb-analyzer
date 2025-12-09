@@ -356,10 +356,10 @@ function airbnb_analyzer_stats_page() {
         <?php endif; ?>
         
         <?php if ($pending_requests > 0): ?>
-        <h2 style="margin-top: 40px;">⚠️ Legacy Processing</h2>
+        <h2 style="margin-top: 40px;">⚠️ Pending Requests Management</h2>
         <div style="margin: 20px 0; padding: 20px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
             <h4 style="margin: 0 0 15px 0;">Process Pending Requests</h4>
-            <p>You have <strong><?php echo $pending_requests; ?></strong> pending legacy request(s) that need processing. These may be from cache clears or incomplete analyses.</p>
+            <p>You have <strong><?php echo $pending_requests; ?></strong> pending request(s) that need processing. These may be from cache clears or incomplete analyses.</p>
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="margin: 15px 0;">
                 <input type="hidden" name="action" value="airbnb_analyzer_process_pending">
                 <?php wp_nonce_field('airbnb_analyzer_process_pending', 'process_pending_nonce'); ?>
@@ -370,6 +370,59 @@ function airbnb_analyzer_stats_page() {
                     This will reanalyze existing BrightData responses without making new API calls.
                 </small>
             </form>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <h4 style="margin: 0 0 15px 0;">🗑️ Delete Individual Requests</h4>
+            <p>Delete stuck or unwanted requests individually:</p>
+            <?php
+            // Get all pending requests
+            $all_pending = $wpdb->get_results(
+                "SELECT snapshot_id, listing_url, email, date_created, status 
+                 FROM $table_name 
+                 WHERE status = 'pending' 
+                 ORDER BY date_created DESC"
+            );
+            
+            if (!empty($all_pending)): ?>
+                <table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th style="width: 200px;">Request ID</th>
+                            <th>Listing URL</th>
+                            <th style="width: 200px;">Email</th>
+                            <th style="width: 150px;">Date Created</th>
+                            <th style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($all_pending as $req): ?>
+                            <tr>
+                                <td><code><?php echo esc_html(substr($req->snapshot_id, 0, 30)); ?>...</code></td>
+                                <td>
+                                    <a href="<?php echo esc_url($req->listing_url); ?>" target="_blank" style="text-decoration: none;">
+                                        <?php echo esc_html(substr($req->listing_url, 0, 60)); ?>...
+                                    </a>
+                                </td>
+                                <td><?php echo esc_html($req->email); ?></td>
+                                <td><?php echo esc_html($req->date_created); ?></td>
+                                <td>
+                                    <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline;">
+                                        <input type="hidden" name="action" value="airbnb_analyzer_delete_request">
+                                        <input type="hidden" name="request_id" value="<?php echo esc_attr($req->snapshot_id); ?>">
+                                        <?php wp_nonce_field('airbnb_analyzer_delete_request_' . $req->snapshot_id, 'delete_request_nonce'); ?>
+                                        <button type="submit" class="button button-small" style="background: #dc3232; color: #fff; border-color: #dc3232;" onclick="return confirm('Are you sure you want to delete this request? This action cannot be undone.');">
+                                            🗑️ Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p style="color: #666;">No pending requests found.</p>
+            <?php endif; ?>
         </div>
         <?php endif; ?>
         
@@ -645,6 +698,7 @@ add_action('admin_post_airbnb_analyzer_export_csv', 'airbnb_analyzer_export_csv'
 
 // Handle processing pending requests
 add_action('admin_post_airbnb_analyzer_process_pending', 'airbnb_analyzer_process_pending_requests');
+add_action('admin_post_airbnb_analyzer_delete_request', 'airbnb_analyzer_delete_request');
 
 function airbnb_analyzer_export_csv() {
     // Check permissions
@@ -798,6 +852,56 @@ function airbnb_analyzer_process_pending_requests() {
     }
     
     wp_redirect($redirect_url);
+    exit;
+}
+
+/**
+ * Delete a single request
+ */
+function airbnb_analyzer_delete_request() {
+    // Check permissions
+    if (!current_user_can('manage_options')) {
+        wp_die('You do not have permission to perform this action.');
+    }
+    
+    // Verify nonce
+    $request_id = isset($_POST['request_id']) ? sanitize_text_field($_POST['request_id']) : '';
+    if (empty($request_id)) {
+        wp_redirect(admin_url('admin.php?page=airbnb-analyzer-stats&message=' . urlencode('No request ID provided') . '&type=error'));
+        exit;
+    }
+    
+    if (!isset($_POST['delete_request_nonce']) || !wp_verify_nonce($_POST['delete_request_nonce'], 'airbnb_analyzer_delete_request_' . $request_id)) {
+        wp_die('Security check failed.');
+    }
+    
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
+    
+    // Delete the request
+    $deleted = $wpdb->delete(
+        $table_name,
+        array('snapshot_id' => $request_id),
+        array('%s')
+    );
+    
+    if ($deleted !== false) {
+        $message = 'Request deleted successfully.';
+        $type = 'success';
+        
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Request deleted: $request_id", 'Admin Delete Request');
+        }
+    } else {
+        $message = 'Failed to delete request. It may not exist.';
+        $type = 'error';
+        
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Failed to delete request: $request_id", 'Admin Delete Request Error');
+        }
+    }
+    
+    wp_redirect(admin_url('admin.php?page=airbnb-analyzer-stats&message=' . urlencode($message) . '&type=' . $type));
     exit;
 }
 

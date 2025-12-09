@@ -241,12 +241,25 @@ function pyairbnb_process_request($request_id) {
     // Convert pyairbnb data to analyzer format
     $listing_data = pyairbnb_format_for_analyzer($raw_data);
     
-    if (empty($listing_data)) {
+    // Check if format conversion returned valid data (not just empty array)
+    $has_data = false;
+    if (is_array($listing_data) && !empty($listing_data)) {
+        // Check if at least one field has a non-empty value
+        foreach ($listing_data as $key => $value) {
+            if (!empty($value) || (is_numeric($value) && $value == 0)) {
+                $has_data = true;
+                break;
+            }
+        }
+    }
+    
+    if (!$has_data) {
         if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("Format conversion returned empty data", 'Airbnb API Error');
+            airbnb_analyzer_debug_log("Format conversion returned empty or invalid data", 'Airbnb API Error');
+            airbnb_analyzer_debug_log("Listing data structure: " . json_encode($listing_data, JSON_PRETTY_PRINT), 'Airbnb API Error');
         }
         // Update request status to error
-        pyairbnb_update_request($request_id, 'error', array('error' => 'No listing data found'), $raw_data);
+        pyairbnb_update_request($request_id, 'error', array('error' => 'No listing data found after format conversion'), $raw_data);
         
         // Send error email
         send_analysis_email($request->email, $request->listing_url, null, 'No listing data found in the response', $request_id);
@@ -311,12 +324,26 @@ function pyairbnb_process_request($request_id) {
  * @return array Formatted data for analyzer
  */
 function pyairbnb_format_for_analyzer($pyairbnb_data) {
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Starting format conversion. Input type: " . gettype($pyairbnb_data), 'Airbnb API Format');
+        if (is_array($pyairbnb_data)) {
+            airbnb_analyzer_debug_log("Input keys: " . implode(', ', array_keys($pyairbnb_data)), 'Airbnb API Format');
+        }
+    }
+    
     if (empty($pyairbnb_data) || !is_array($pyairbnb_data)) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Format conversion failed: Input is empty or not an array", 'Airbnb API Format Error');
+        }
         return array();
     }
     
     // Handle wrapped response (data key) or direct response
     $listing = isset($pyairbnb_data['data']) ? $pyairbnb_data['data'] : $pyairbnb_data;
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Listing data extracted. Listing keys: " . (is_array($listing) ? implode(', ', array_keys($listing)) : 'not an array'), 'Airbnb API Format');
+    }
     
     // Parse bedrooms, bathrooms, beds, max_guests from sub_description.items
     $bedrooms = 0;
@@ -631,6 +658,18 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         'reviews' => isset($listing['reviews']) ? $listing['reviews'] : array(),
         'coordinates' => isset($listing['coordinates']) ? $listing['coordinates'] : null
     );
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        $data_keys = array_keys($listing_data);
+        $non_empty_count = 0;
+        foreach ($listing_data as $key => $value) {
+            if (!empty($value)) {
+                $non_empty_count++;
+            }
+        }
+        airbnb_analyzer_debug_log("Format conversion completed. Output keys: " . implode(', ', $data_keys), 'Airbnb API Format');
+        airbnb_analyzer_debug_log("Format conversion: $non_empty_count non-empty fields out of " . count($listing_data), 'Airbnb API Format');
+    }
     
     return $listing_data;
 }
