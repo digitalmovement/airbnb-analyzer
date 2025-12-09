@@ -4,6 +4,45 @@
  */
 
 /**
+ * Model constants - Update these when new models are released
+ * 
+ * Anthropic Model Naming Convention:
+ * - claude-sonnet-4-20250514: Claude Sonnet 4 (latest as of May 2025)
+ * - claude-3-5-sonnet-latest: Always points to latest Claude 3.5 Sonnet
+ * - claude-3-5-haiku-latest: Always points to latest Claude 3.5 Haiku
+ * 
+ * Using "latest" aliases ensures automatic updates within a model family.
+ * For cross-family updates (e.g., 3.5 to 4), manual update is required.
+ */
+define('AIRBNB_ANALYZER_CLAUDE_MODEL_FAST', 'claude-3-5-haiku-latest');      // Fast/cheap model for simple tasks
+define('AIRBNB_ANALYZER_CLAUDE_MODEL_BALANCED', 'claude-sonnet-4-20250514'); // Balanced model for analysis
+define('AIRBNB_ANALYZER_CLAUDE_MODEL_EXPERT', 'claude-sonnet-4-20250514');   // Best model for expert analysis
+
+/**
+ * Get the Claude model to use for a specific purpose
+ * 
+ * @param string $purpose One of: 'fast', 'balanced', 'expert'
+ * @return string The model ID to use
+ */
+function airbnb_analyzer_get_claude_model($purpose = 'balanced') {
+    // Allow override via WordPress options
+    $custom_model = get_option('airbnb_analyzer_claude_model_' . $purpose);
+    if (!empty($custom_model)) {
+        return $custom_model;
+    }
+    
+    switch ($purpose) {
+        case 'fast':
+            return AIRBNB_ANALYZER_CLAUDE_MODEL_FAST;
+        case 'expert':
+            return AIRBNB_ANALYZER_CLAUDE_MODEL_EXPERT;
+        case 'balanced':
+        default:
+            return AIRBNB_ANALYZER_CLAUDE_MODEL_BALANCED;
+    }
+}
+
+/**
  * Send a request to Claude API
  * 
  * @param string $prompt The prompt to send to Claude
@@ -17,6 +56,7 @@ function airbnb_analyzer_claude_request($prompt) {
     }
     
     $url = 'https://api.anthropic.com/v1/messages';
+    $model = airbnb_analyzer_get_claude_model('fast'); // Use fast model for simple requests
     
     $args = array(
         'method' => 'POST',
@@ -26,7 +66,7 @@ function airbnb_analyzer_claude_request($prompt) {
             'anthropic-version' => '2023-06-01'
         ),
         'body' => json_encode(array(
-            'model' => 'claude-3-haiku-20240307', // Using the cheapest Claude model
+            'model' => $model,
             'max_tokens' => 1000,
             'messages' => array(
                 array(
@@ -60,7 +100,7 @@ function airbnb_analyzer_claude_request($prompt) {
 
 /**
  * Send a request to Claude API for expert analysis
- * Uses Claude 3 Sonnet with higher token limit for comprehensive analysis
+ * Uses the expert Claude model with higher token limit for comprehensive analysis
  * 
  * @param string $prompt The comprehensive analysis prompt
  * @return array|WP_Error The Claude API response or error
@@ -73,6 +113,7 @@ function airbnb_analyzer_claude_expert_request($prompt) {
     }
     
     $url = 'https://api.anthropic.com/v1/messages';
+    $model = airbnb_analyzer_get_claude_model('expert'); // Use expert model for comprehensive analysis
     
     $args = array(
         'method' => 'POST',
@@ -82,7 +123,7 @@ function airbnb_analyzer_claude_expert_request($prompt) {
             'anthropic-version' => '2023-06-01'
         ),
         'body' => json_encode(array(
-            'model' => 'claude-3-sonnet-20240229', // Using Sonnet for better analysis quality
+            'model' => $model,
             'max_tokens' => 4000, // Higher token limit for comprehensive analysis
             'messages' => array(
                 array(
@@ -649,12 +690,14 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     
     $url = 'https://api.anthropic.com/v1/messages/batches';
     
+    $model = airbnb_analyzer_get_claude_model('expert'); // Use expert model for batch analysis
+    
     $batch_request = array(
         'requests' => array(
             array(
                 'custom_id' => 'expert_analysis_' . $snapshot_id,
                 'params' => array(
-                    'model' => 'claude-3-5-sonnet', // Use model name without date to get latest version that supports batching
+                    'model' => $model,
                     'max_tokens' => 20000, // Well within the 8192 limit for this model
                     'messages' => array(
                         array(
@@ -668,7 +711,7 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     );
     
     error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
-    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet, max_tokens: 20000');
+    error_log('CLAUDE_DEBUG: Using model: ' . $model . ', max_tokens: 20000');
     error_log('CLAUDE_DEBUG: Prompt preview (first 500 chars): ' . substr($prompt, 0, 500));
     
     $args = array(
@@ -853,9 +896,10 @@ function airbnb_analyzer_retrieve_claude_batch_results($results_url) {
  */
 function airbnb_analyzer_test_claude_api_key($api_key) {
     $url = 'https://api.anthropic.com/v1/messages';
+    $model = airbnb_analyzer_get_claude_model('fast'); // Use fast model for testing
     
     $test_request = array(
-        'model' => 'claude-3-5-sonnet', // Use model name without date to get latest version
+        'model' => $model,
         'max_tokens' => 10,
         'messages' => array(
             array(
