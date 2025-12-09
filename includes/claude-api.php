@@ -654,7 +654,7 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
             array(
                 'custom_id' => 'expert_analysis_' . $snapshot_id,
                 'params' => array(
-                    'model' => 'claude-3-5-sonnet-20241022', // Updated to current model version that supports batching
+                    'model' => 'claude-3-5-sonnet', // Use model name without date to get latest version that supports batching
                     'max_tokens' => 20000, // Well within the 8192 limit for this model
                     'messages' => array(
                         array(
@@ -668,7 +668,7 @@ function airbnb_analyzer_create_claude_batch($snapshot_id, $prompt) {
     );
     
     error_log('CLAUDE_DEBUG: Batch request payload size: ' . strlen(json_encode($batch_request)) . ' bytes');
-    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet-20241022, max_tokens: 20000');
+    error_log('CLAUDE_DEBUG: Using model: claude-3-5-sonnet, max_tokens: 20000');
     error_log('CLAUDE_DEBUG: Prompt preview (first 500 chars): ' . substr($prompt, 0, 500));
     
     $args = array(
@@ -855,7 +855,7 @@ function airbnb_analyzer_test_claude_api_key($api_key) {
     $url = 'https://api.anthropic.com/v1/messages';
     
     $test_request = array(
-        'model' => 'claude-3-5-sonnet-20241022', // Updated to current model version
+        'model' => 'claude-3-5-sonnet', // Use model name without date to get latest version
         'max_tokens' => 10,
         'messages' => array(
             array(
