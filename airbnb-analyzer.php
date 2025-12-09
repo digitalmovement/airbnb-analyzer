@@ -495,15 +495,53 @@ function airbnb_analyzer_handle_expert_analysis() {
     }
     
     // Create new batch request
-    $raw_data = json_decode($request->raw_response_data, true);
-    if (empty($raw_data)) {
-        wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
+    // Try to use processed listing_data first (from response_data), fallback to raw_response_data
+    $listing_data = null;
+    $response_data = json_decode($request->response_data, true);
+    
+    if (!empty($response_data) && isset($response_data['listing_data'])) {
+        // Use processed listing data (preferred - already formatted)
+        $listing_data = $response_data['listing_data'];
+        error_log('BATCH_DEBUG: Using processed listing_data from response_data');
+    } else {
+        // Fallback to raw_response_data and extract/format it
+        $raw_data = json_decode($request->raw_response_data, true);
+        if (empty($raw_data)) {
+            wp_send_json_error(array('message' => 'Raw analysis data not available for expert analysis.'));
+        }
+        
+        error_log('BATCH_DEBUG: Using raw_response_data, will extract listing data');
+        error_log('BATCH_DEBUG: Raw data type: ' . gettype($raw_data) . ', is_array: ' . (is_array($raw_data) ? 'YES' : 'NO'));
+        if (is_array($raw_data)) {
+            error_log('BATCH_DEBUG: Raw data keys: ' . implode(', ', array_keys($raw_data)));
+        }
+        
+        // Extract listing data from raw response
+        if (isset($raw_data['data']) && is_array($raw_data['data'])) {
+            // PyAirbnb format: data is in 'data' key
+            $listing_data = $raw_data['data'];
+        } elseif (isset($raw_data[0]) && is_array($raw_data[0])) {
+            // Old format: array with first element
+            $listing_data = $raw_data[0];
+        } else {
+            // Assume raw_data is the listing itself
+            $listing_data = $raw_data;
+        }
+    }
+    
+    if (empty($listing_data) || !is_array($listing_data)) {
+        wp_send_json_error(array('message' => 'Could not extract listing data for expert analysis.'));
     }
     
     error_log('BATCH_DEBUG: Creating new batch for snapshot ' . $snapshot_id);
+    error_log('BATCH_DEBUG: Listing data keys: ' . implode(', ', array_keys($listing_data)));
+    error_log('BATCH_DEBUG: Listing data sample (first 500 chars): ' . substr(json_encode($listing_data), 0, 500));
     
     // Optimize the data for Claude
-    $optimized_data = optimize_data_for_claude($raw_data);
+    $optimized_data = optimize_data_for_claude($listing_data);
+    
+    error_log('BATCH_DEBUG: Optimized data keys: ' . (is_array($optimized_data) ? implode(', ', array_keys($optimized_data)) : 'not an array'));
+    error_log('BATCH_DEBUG: Optimized data sample (first 500 chars): ' . substr(json_encode($optimized_data), 0, 500));
     
     // Prepare the expert analysis prompt
     $expert_prompt = get_expert_analysis_prompt();
@@ -849,8 +887,31 @@ function optimize_data_for_claude($raw_data) {
     // Initialize optimized data structure
     $optimized = array();
     
-    // Get the first listing data (main property)
-    $listing = isset($raw_data[0]) ? $raw_data[0] : array();
+    // Handle different data formats:
+    // 1. Old format: array with [0] being the listing (BrightData format)
+    // 2. New format: direct listing object (PyAirbnb format)
+    // 3. Wrapped format: data wrapped in 'data' key
+    $listing = array();
+    
+    if (isset($raw_data['data']) && is_array($raw_data['data'])) {
+        // Data is wrapped in 'data' key (PyAirbnb API response format)
+        $listing = $raw_data['data'];
+    } elseif (isset($raw_data[0]) && is_array($raw_data[0])) {
+        // Old format: array with first element being the listing
+        $listing = $raw_data[0];
+    } elseif (is_array($raw_data) && (isset($raw_data['title']) || isset($raw_data['listing_title']) || isset($raw_data['amenities']))) {
+        // Direct listing object (PyAirbnb format - already processed)
+        $listing = $raw_data;
+    } else {
+        // Fallback: try to use raw_data as-is
+        $listing = is_array($raw_data) ? $raw_data : array();
+    }
+    
+    // Log for debugging
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Optimizing data for Claude. Listing keys: " . (is_array($listing) ? implode(', ', array_keys($listing)) : 'not an array'), 'Expert Analysis');
+        airbnb_analyzer_debug_log("Raw data structure - is_array: " . (is_array($raw_data) ? 'YES' : 'NO') . ", has [0]: " . (isset($raw_data[0]) ? 'YES' : 'NO') . ", has 'data': " . (isset($raw_data['data']) ? 'YES' : 'NO'), 'Expert Analysis');
+    }
     
     // Extract essential listing information
     $optimized['basic_info'] = array(
