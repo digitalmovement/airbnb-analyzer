@@ -67,7 +67,20 @@ function pyairbnb_scrape_listing($listing_url, $currency = 'USD', $language = 'e
     
     if (function_exists('airbnb_analyzer_debug_log')) {
         airbnb_analyzer_debug_log("API response code: $status_code", 'Airbnb API');
-        airbnb_analyzer_debug_log("API response body: " . substr($response_body, 0, 500), 'Airbnb API');
+        $response_length = strlen($response_body);
+        airbnb_analyzer_debug_log("API response body length: $response_length bytes", 'Airbnb API');
+        
+        // Check if response looks like valid JSON
+        $is_valid_json_start = (substr(trim($response_body), 0, 1) === '{' || substr(trim($response_body), 0, 1) === '[');
+        airbnb_analyzer_debug_log("Response appears to be JSON: " . ($is_valid_json_start ? 'YES' : 'NO'), 'Airbnb API');
+        
+        airbnb_analyzer_debug_log("API response body (first 1000 chars): " . substr($response_body, 0, 1000), 'Airbnb API');
+        if ($response_length > 1000) {
+            airbnb_analyzer_debug_log("API response body (last 500 chars): " . substr($response_body, -500), 'Airbnb API');
+            // Check if JSON appears complete (ends with } or ])
+            $last_char = trim(substr($response_body, -1));
+            airbnb_analyzer_debug_log("Response ends with: '$last_char' (complete: " . (in_array($last_char, ['}', ']']) ? 'YES' : 'NO') . ")", 'Airbnb API');
+        }
     }
     
     // Check HTTP status code
@@ -79,25 +92,50 @@ function pyairbnb_scrape_listing($listing_url, $currency = 'USD', $language = 'e
     $json_data = json_decode($response_body, true);
     
     if (json_last_error() !== JSON_ERROR_NONE) {
-        return new WP_Error('json_error', 'Failed to parse API response: ' . json_last_error_msg() . '. Response: ' . substr($response_body, 0, 200));
+        $error_msg = 'Failed to parse API response: ' . json_last_error_msg() . '. Response length: ' . strlen($response_body);
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log($error_msg, 'Airbnb API Error');
+            airbnb_analyzer_debug_log("Response body (first 1000 chars): " . substr($response_body, 0, 1000), 'Airbnb API Error');
+        }
+        return new WP_Error('json_error', $error_msg);
+    }
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("JSON parsed successfully. Keys: " . implode(', ', array_keys($json_data)), 'Airbnb API');
     }
     
     // Check for error in response
     if (isset($json_data['error']) && $json_data['error']) {
-        return new WP_Error('api_error', $json_data['message'] ?? 'Unknown error from API');
+        $error_msg = $json_data['message'] ?? 'Unknown error from API';
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("API returned error: $error_msg", 'Airbnb API Error');
+        }
+        return new WP_Error('api_error', $error_msg);
     }
     
     // Extract data from response
     if (isset($json_data['data'])) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            $data_keys = is_array($json_data['data']) ? implode(', ', array_keys($json_data['data'])) : 'not an array';
+            airbnb_analyzer_debug_log("Extracting data from response. Data keys: $data_keys", 'Airbnb API');
+        }
         return $json_data['data'];
     }
     
     // If response is the data directly (no wrapper)
     if (isset($json_data['id']) || isset($json_data['title'])) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Response is data directly (no wrapper). Keys: " . implode(', ', array_keys($json_data)), 'Airbnb API');
+        }
         return $json_data;
     }
     
-    return new WP_Error('no_data', 'No data returned from API. Response: ' . substr($response_body, 0, 200));
+    $error_msg = 'No data returned from API. Response keys: ' . implode(', ', array_keys($json_data));
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log($error_msg, 'Airbnb API Error');
+        airbnb_analyzer_debug_log("Full response structure: " . json_encode($json_data, JSON_PRETTY_PRINT), 'Airbnb API Error');
+    }
+    return new WP_Error('no_data', $error_msg);
 }
 
 /**
@@ -116,10 +154,12 @@ function pyairbnb_trigger_scraping($listing_url, $email) {
     pyairbnb_store_request($request_id, $listing_url, $email);
     
     // Process asynchronously using WordPress cron
-    wp_schedule_single_event(time() + 5, 'airbnb_analyzer_process_pyairbnb_request', array($request_id));
+    $scheduled = wp_schedule_single_event(time() + 5, 'airbnb_analyzer_process_pyairbnb_request', array($request_id));
     
     if (function_exists('airbnb_analyzer_debug_log')) {
         airbnb_analyzer_debug_log("Airbnb API scraping scheduled for URL: $listing_url", 'Airbnb API');
+        airbnb_analyzer_debug_log("Cron scheduled: " . ($scheduled !== false ? 'SUCCESS' : 'FAILED') . " for request_id: $request_id", 'Airbnb API');
+        airbnb_analyzer_debug_log("Cron will run at: " . date('Y-m-d H:i:s', time() + 5), 'Airbnb API');
     }
     
     return array(
@@ -136,6 +176,10 @@ function pyairbnb_trigger_scraping($listing_url, $email) {
  * @param string $request_id The request ID
  */
 function pyairbnb_process_request($request_id) {
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Processing request: $request_id", 'Airbnb API');
+    }
+    
     global $wpdb;
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests'; // Keep same table name for compatibility
     
@@ -154,6 +198,9 @@ function pyairbnb_process_request($request_id) {
     
     if ($request->status !== 'pending') {
         // Already processed
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Request already processed with status: {$request->status}", 'Airbnb API');
+        }
         return false;
     }
     
@@ -162,22 +209,42 @@ function pyairbnb_process_request($request_id) {
     $language = get_option('airbnb_analyzer_language', 'en');
     $adults = 2;
     
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Scraping listing: {$request->listing_url} (currency: $currency, language: $language, adults: $adults)", 'Airbnb API');
+    }
+    
     // Scrape the listing
     $raw_data = pyairbnb_scrape_listing($request->listing_url, $currency, $language, $adults);
     
     if (is_wp_error($raw_data)) {
+        $error_message = $raw_data->get_error_message();
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Scraping failed: $error_message", 'Airbnb API Error');
+        }
         // Update request status to error
-        pyairbnb_update_request($request_id, 'error', array('error' => $raw_data->get_error_message()), null);
+        pyairbnb_update_request($request_id, 'error', array('error' => $error_message), null);
         
         // Send error email
-        send_analysis_email($request->email, $request->listing_url, null, $raw_data->get_error_message(), $request_id);
+        send_analysis_email($request->email, $request->listing_url, null, $error_message, $request_id);
         return false;
+    }
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        $data_type = is_array($raw_data) ? 'array' : gettype($raw_data);
+        $data_size = is_array($raw_data) ? count($raw_data) : strlen($raw_data);
+        airbnb_analyzer_debug_log("Scraping successful. Data type: $data_type, Size: $data_size", 'Airbnb API');
+        if (is_array($raw_data)) {
+            airbnb_analyzer_debug_log("Raw data keys: " . implode(', ', array_keys($raw_data)), 'Airbnb API');
+        }
     }
     
     // Convert pyairbnb data to analyzer format
     $listing_data = pyairbnb_format_for_analyzer($raw_data);
     
     if (empty($listing_data)) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Format conversion returned empty data", 'Airbnb API Error');
+        }
         // Update request status to error
         pyairbnb_update_request($request_id, 'error', array('error' => 'No listing data found'), $raw_data);
         
@@ -186,21 +253,48 @@ function pyairbnb_process_request($request_id) {
         return false;
     }
     
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Format conversion successful. Listing data keys: " . implode(', ', array_keys($listing_data)), 'Airbnb API');
+    }
+    
     // Analyze the listing
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Starting analysis...", 'Airbnb API');
+    }
+    
     $analysis = null;
     if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Using Claude API for analysis", 'Airbnb API');
+        }
         $analysis = airbnb_analyzer_analyze_listing_with_claude($listing_data);
     } else {
+        if (function_exists('airbnb_analyzer_debug_log')) {
+            airbnb_analyzer_debug_log("Using standard analysis", 'Airbnb API');
+        }
         $analysis = airbnb_analyzer_analyze_listing($listing_data);
     }
     
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        $analysis_status = is_wp_error($analysis) ? 'failed: ' . $analysis->get_error_message() : 'completed';
+        airbnb_analyzer_debug_log("Analysis $analysis_status", 'Airbnb API');
+    }
+    
     // Update request status to completed with both processed and raw data
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Updating request status to completed", 'Airbnb API');
+    }
+    
     pyairbnb_update_request($request_id, 'completed', array(
         'listing_data' => $listing_data,
         'analysis' => $analysis
     ), $raw_data);
     
     // Send the analysis via email
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Sending analysis email to: {$request->email}", 'Airbnb API');
+    }
+    
     send_analysis_email($request->email, $request->listing_url, $analysis, null, $request_id);
     
     if (function_exists('airbnb_analyzer_debug_log')) {
