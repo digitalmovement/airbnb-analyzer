@@ -1,6 +1,6 @@
 # Airbnb Listing Analyzer WordPress Plugin
 
-A comprehensive WordPress plugin that analyzes Airbnb listings and provides detailed optimization recommendations using BrightData API and Claude AI.
+A comprehensive WordPress plugin that analyzes Airbnb listings and provides detailed optimization recommendations using Python pyairbnb scraper and Claude AI.
 
 ## Features
 
@@ -35,10 +35,19 @@ Displays analysis results. **Important**: You must create a WordPress page with 
 4. Content: `[airbnb_analysis_results]`
 5. Publish the page
 
-### 2. API Configuration
-Configure these API keys in the WordPress admin:
-- **BrightData API**: For scraping Airbnb listing data
-- **Claude API**: For AI-powered analysis and recommendations
+### 2. Python Setup
+The plugin uses Python with the pyairbnb library to scrape Airbnb listings:
+
+1. **Install Python 3** on your server
+2. **Install pyairbnb**: `pip install pyairbnb`
+3. **Configure Python path** in plugin settings (default: python3)
+
+### 3. API Configuration
+Configure these settings in the WordPress admin:
+- **Python Path**: Path to Python executable (e.g., python3)
+- **Currency**: Default currency for scraping (e.g., USD, EUR)
+- **Language**: Default language code (e.g., en, es, fr)
+- **Claude API**: For AI-powered analysis and recommendations (optional)
 - **reCAPTCHA**: For spam protection
 
 ## Analysis Categories
@@ -80,6 +89,15 @@ The plugin analyzes these aspects of Airbnb listings:
 - **Caching**: Intelligent caching prevents duplicate API calls
 - **Error Handling**: Graceful handling of API failures and missing data
 - **Security**: Input sanitization, nonce verification, capability checks
+
+## Render API Deployment
+
+This plugin can also use a deployed API on Render instead of running Python locally. See `RENDER_DEPLOYMENT_GUIDE.md` for complete instructions.
+
+### Quick Setup:
+1. Deploy `API.py` to Render (see `RENDER_DEPLOYMENT_GUIDE.md`)
+2. Update your WordPress plugin to call the Render API URL instead of running Python locally
+3. The API provides all pyairbnb functionality via HTTP endpoints
 
 ## Support
 

@@ -1,7 +1,10 @@
 <?php
 /**
- * Brightdata notification endpoint
- * This file handles callbacks from Brightdata when scraping is complete
+ * Notification endpoint (DEPRECATED)
+ * This file is kept for backward compatibility but is no longer used.
+ * The plugin now uses WordPress cron to process requests via pyairbnb_process_request()
+ * 
+ * @deprecated This webhook handler is no longer needed as we use cron-based processing
  */
 
 // Ensure WordPress is loaded
@@ -12,7 +15,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Include required files
-require_once(plugin_dir_path(__FILE__) . 'includes/brightdata-api.php');
+require_once(plugin_dir_path(__FILE__) . 'includes/pyairbnb-api.php');
 require_once(plugin_dir_path(__FILE__) . 'includes/analyzer.php');
 require_once(plugin_dir_path(__FILE__) . 'includes/claude-api.php');
 require_once(plugin_dir_path(__FILE__) . 'includes/settings.php');
@@ -79,79 +82,35 @@ function handle_brightdata_notification() {
     }
     
     // Get the request from database
-    $request = brightdata_get_request($snapshot_id);
+    $request = pyairbnb_get_request($snapshot_id);
     
     if (!$request) {
         http_response_code(404);
         if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("Request not found for snapshot ID: $snapshot_id", 'Brightdata Notification Error');
+            airbnb_analyzer_debug_log("Request not found for snapshot ID: $snapshot_id", 'Notification Error');
         }
         echo json_encode(array('error' => 'Request not found'));
         exit;
     }
     
-    // Get the actual data from Brightdata
-    $brightdata_response = brightdata_get_snapshot($snapshot_id);
-    
-    if (is_wp_error($brightdata_response)) {
-        // Update request status to error
-        brightdata_update_request($snapshot_id, 'error', array('error' => $brightdata_response->get_error_message()), null);
-        
-        if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("Error fetching snapshot data: " . $brightdata_response->get_error_message(), 'Brightdata Notification Error');
-        }
-        
-        // Send error email
-        send_analysis_email($request->email, $request->listing_url, null, $brightdata_response->get_error_message(), $snapshot_id);
-        
-        http_response_code(500);
-        echo json_encode(array('error' => $brightdata_response->get_error_message()));
-        exit;
-    }
-    
-    // Convert Brightdata data to analyzer format
-    $listing_data = brightdata_format_for_analyzer($brightdata_response);
-    
-    if (empty($listing_data)) {
-        // Update request status to error
-        brightdata_update_request($snapshot_id, 'error', array('error' => 'No listing data found'), $brightdata_response);
-        
-        if (function_exists('airbnb_analyzer_debug_log')) {
-            airbnb_analyzer_debug_log("No listing data found for snapshot ID: $snapshot_id", 'Brightdata Notification Error');
-        }
-        
-        // Send error email
-        send_analysis_email($request->email, $request->listing_url, null, 'No listing data found in the response', $snapshot_id);
-        
-        http_response_code(500);
-        echo json_encode(array('error' => 'No listing data found'));
-        exit;
-    }
-    
-    // Analyze the listing
-    $analysis = null;
-    if (!empty(get_option('airbnb_analyzer_claude_api_key'))) {
-        $analysis = airbnb_analyzer_analyze_listing_with_claude($listing_data);
-    } else {
-        $analysis = airbnb_analyzer_analyze_listing($listing_data);
-    }
-    
-    // Update request status to completed with both processed and raw data
-    brightdata_update_request($snapshot_id, 'completed', array(
-        'listing_data' => $listing_data,
-        'analysis' => $analysis
-    ), $brightdata_response);
-    
-    // Send the analysis via email
-    send_analysis_email($request->email, $request->listing_url, $analysis, null, $snapshot_id);
-    
+    // This webhook is deprecated - requests are now processed via cron
+    // If we receive a webhook, just trigger the processing function
     if (function_exists('airbnb_analyzer_debug_log')) {
-        airbnb_analyzer_debug_log("Analysis completed and sent for snapshot ID: $snapshot_id", 'Brightdata Notification');
+        airbnb_analyzer_debug_log("Deprecated webhook received for snapshot ID: $snapshot_id. Processing via cron function.", 'Notification');
+    }
+    
+    // Process the request using the new function
+    $result = pyairbnb_process_request($snapshot_id);
+    
+    if (!$result) {
+        http_response_code(500);
+        echo json_encode(array('error' => 'Failed to process request'));
+        exit;
     }
     
     // Return success response
     http_response_code(200);
-    echo json_encode(array('status' => 'success', 'message' => 'Analysis completed and sent'));
+    echo json_encode(array('status' => 'success', 'message' => 'Request queued for processing'));
     exit;
 }
 

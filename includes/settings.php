@@ -25,12 +25,24 @@ add_action('admin_menu', 'airbnb_analyzer_add_settings_page');
  */
 function airbnb_analyzer_register_settings() {
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_claude_api_key');
-    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_api_key');
-    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_dataset_id');
-    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_brightdata_test_mode', array(
-        'type' => 'boolean',
-        'default' => false,
-        'sanitize_callback' => 'rest_sanitize_boolean',
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_api_key', array(
+        'type' => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+    ));
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_api_url', array(
+        'type' => 'string',
+        'default' => 'https://airbnb-api-cql0.onrender.com/api/listing/details',
+        'sanitize_callback' => 'esc_url_raw',
+    ));
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_currency', array(
+        'type' => 'string',
+        'default' => 'USD',
+        'sanitize_callback' => 'sanitize_text_field',
+    ));
+    register_setting('airbnb_analyzer_options', 'airbnb_analyzer_language', array(
+        'type' => 'string',
+        'default' => 'en',
+        'sanitize_callback' => 'sanitize_text_field',
     ));
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_site_key');
     register_setting('airbnb_analyzer_options', 'airbnb_analyzer_recaptcha_secret_key');
@@ -64,27 +76,31 @@ function airbnb_analyzer_settings_page() {
             <h2>API Settings</h2>
             <table class="form-table">
                 <tr valign="top">
-                    <th scope="row">Brightdata API Key</th>
+                    <th scope="row">Airbnb API Key</th>
                     <td>
-                        <input type="password" name="airbnb_analyzer_brightdata_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_api_key')); ?>" class="regular-text" />
-                        <p class="description">Enter your Brightdata API key to fetch Airbnb listing data. Required for the analyzer to work.</p>
+                        <input type="password" name="airbnb_analyzer_api_key" value="<?php echo esc_attr(get_option('airbnb_analyzer_api_key')); ?>" class="regular-text" />
+                        <p class="description">Enter your Airbnb API key. This is required for the analyzer to work.</p>
                     </td>
                 </tr>
                 <tr valign="top">
-                    <th scope="row">Brightdata Dataset ID</th>
+                    <th scope="row">Airbnb API URL</th>
                     <td>
-                        <input type="text" name="airbnb_analyzer_brightdata_dataset_id" value="<?php echo esc_attr(get_option('airbnb_analyzer_brightdata_dataset_id', 'gd_ld7ll037kqy322v05')); ?>" class="regular-text" />
-                        <p class="description">Brightdata dataset ID for Airbnb data collection. Default: gd_ld7ll037kqy322v05</p>
+                        <input type="text" name="airbnb_analyzer_api_url" value="<?php echo esc_attr(get_option('airbnb_analyzer_api_url', 'https://airbnb-api-cql0.onrender.com/api/listing/details')); ?>" class="regular-text" />
+                        <p class="description">The API endpoint URL. Default: https://airbnb-api-cql0.onrender.com/api/listing/details</p>
                     </td>
                 </tr>
                 <tr valign="top">
-                    <th scope="row">Test Mode (No Notifications)</th>
+                    <th scope="row">Currency</th>
                     <td>
-                        <label>
-                            <input type="checkbox" name="airbnb_analyzer_brightdata_test_mode" value="1" <?php checked(get_option('airbnb_analyzer_brightdata_test_mode'), true); ?> />
-                            Enable test mode (disable email notifications for testing)
-                        </label>
-                        <p class="description">When enabled, requests won't include notification URL. Use this if you're getting 400 errors.</p>
+                        <input type="text" name="airbnb_analyzer_currency" value="<?php echo esc_attr(get_option('airbnb_analyzer_currency', 'USD')); ?>" class="regular-text" />
+                        <p class="description">Default currency code for scraping (e.g., USD, EUR, GBP). Default: USD</p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row">Language</th>
+                    <td>
+                        <input type="text" name="airbnb_analyzer_language" value="<?php echo esc_attr(get_option('airbnb_analyzer_language', 'en')); ?>" class="regular-text" />
+                        <p class="description">Default language code for scraping (e.g., en, es, fr, de). Default: en</p>
                     </td>
                 </tr>
                 <tr valign="top">

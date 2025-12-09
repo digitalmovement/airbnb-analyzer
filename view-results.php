@@ -9,11 +9,11 @@ $is_shortcode_mode = defined('AIRBNB_ANALYZER_SHORTCODE_MODE');
 if (!$is_shortcode_mode) {
     // Load WordPress only when not in shortcode mode (shortcode already has WordPress loaded)
     require_once('../../../wp-config.php');
-    require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
+    require_once(AIRBNB_ANALYZER_PATH . 'includes/pyairbnb-api.php');
 } else {
-    // In shortcode mode, make sure we have the brightdata-api functions
-    if (!function_exists('brightdata_get_request')) {
-        require_once(plugin_dir_path(__FILE__) . 'brightdata-api.php');
+    // In shortcode mode, make sure we have the pyairbnb-api functions
+    if (!function_exists('pyairbnb_get_request')) {
+        require_once(plugin_dir_path(__FILE__) . 'includes/pyairbnb-api.php');
     }
 }
 
@@ -30,7 +30,7 @@ if (empty($snapshot_id)) {
 }
 
 // Get request data
-$request = brightdata_get_request($snapshot_id);
+$request = pyairbnb_get_request($snapshot_id);
 if (!$request || $request->status !== 'completed') {
     if ($is_shortcode_mode) {
         echo '<div class="airbnb-analyzer-error">Analysis not found or not completed.</div>';

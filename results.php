@@ -8,7 +8,7 @@
 require_once('../../../wp-config.php');
 
 // Load our includes
-require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/pyairbnb-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/analyzer.php');
 
 // Get the snapshot ID from URL
@@ -19,7 +19,7 @@ if (empty($snapshot_id)) {
 }
 
 // Get the analysis request
-$request = brightdata_get_request($snapshot_id);
+$request = pyairbnb_get_request($snapshot_id);
 
 if (!$request) {
     wp_die('Analysis not found. The link may be invalid or expired.');

@@ -5,19 +5,13 @@
 
 /**
  * Get listing data from AirBnB
- * Note: This function now uses Brightdata API instead of direct Airbnb API
- * For async processing, use brightdata_trigger_scraping() instead
+ * Note: This function now uses PyAirbnb Python scraper instead of direct Airbnb API
+ * For async processing, use pyairbnb_trigger_scraping() instead
  * 
  * @param string $listing_url The AirBnB listing URL
  * @return array|WP_Error Listing data or error
  */
 function airbnb_analyzer_get_listing_data($listing_url) {
-    // Check if Brightdata API is available
-    $brightdata_api_key = get_option('airbnb_analyzer_brightdata_api_key');
-    if (empty($brightdata_api_key)) {
-        return new WP_Error('api_unavailable', 'Brightdata API key is not configured. The old Airbnb API is no longer available.');
-    }
-    
     // Try to get data from a recent successful request first
     global $wpdb;
     $table_name = $wpdb->prefix . 'airbnb_analyzer_brightdata_requests';
@@ -37,15 +31,15 @@ function airbnb_analyzer_get_listing_data($listing_url) {
     }
     
     // If no cached data, return error as this function is now deprecated for new requests
-    return new WP_Error('deprecated_function', 'This function is deprecated. Please use the async brightdata_trigger_scraping() function instead, or use the web interface which will email you the results.');
+    return new WP_Error('deprecated_function', 'This function is deprecated. Please use the async pyairbnb_trigger_scraping() function instead, or use the web interface which will email you the results.');
 }
 
 /**
- * Legacy function - now deprecated in favor of Brightdata API
+ * Legacy function - now deprecated in favor of PyAirbnb scraper
  * This function kept all the old Airbnb API logic for reference
  */
 function airbnb_analyzer_get_listing_data_legacy($listing_url) {
-    return new WP_Error('deprecated', 'This function has been replaced by Brightdata API integration.');
+    return new WP_Error('deprecated', 'This function has been replaced by PyAirbnb Python scraper integration.');
 }
 
 /**

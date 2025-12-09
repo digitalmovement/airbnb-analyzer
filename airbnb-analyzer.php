@@ -19,7 +19,7 @@ define('AIRBNB_ANALYZER_URL', plugin_dir_url(__FILE__));
 require_once(AIRBNB_ANALYZER_PATH . 'includes/shortcode.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/analyzer.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/api.php');
-require_once(AIRBNB_ANALYZER_PATH . 'includes/brightdata-api.php');
+require_once(AIRBNB_ANALYZER_PATH . 'includes/pyairbnb-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/settings.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/claude-api.php');
 require_once(AIRBNB_ANALYZER_PATH . 'includes/admin.php');
@@ -188,6 +188,9 @@ add_action('airbnb_analyzer_process_batch_results', 'airbnb_analyzer_process_bat
 // Register cron hook for checking batch statuses
 add_action('airbnb_analyzer_check_batch_statuses', 'airbnb_analyzer_check_batch_statuses_callback');
 
+// Register cron hook for processing PyAirbnb requests
+add_action('airbnb_analyzer_process_pyairbnb_request', 'pyairbnb_process_request');
+
 // Schedule cron job on plugin activation
 register_activation_hook(__FILE__, 'airbnb_analyzer_schedule_cron_jobs');
 
@@ -323,10 +326,10 @@ function airbnb_analyzer_handle_ajax() {
         wp_send_json_error(array('message' => 'Please provide a valid email address'));
     }
     
-    // Check if Brightdata API key is configured
-    $brightdata_api_key = get_option('airbnb_analyzer_brightdata_api_key');
-    if (empty($brightdata_api_key)) {
-        wp_send_json_error(array('message' => 'Brightdata API key is not configured. Please contact the administrator.'));
+    // Check if API key is configured
+    $api_key = get_option('airbnb_analyzer_api_key');
+    if (empty($api_key)) {
+        wp_send_json_error(array('message' => 'Airbnb API key is not configured. Please contact the administrator.'));
     }
     
     // Verify CAPTCHA
@@ -351,28 +354,20 @@ function airbnb_analyzer_handle_ajax() {
     // Store the email in the database
     airbnb_analyzer_store_email($email, $listing_url);
     
-    // Trigger Brightdata scraping (async)
-    $brightdata_result = brightdata_trigger_scraping($listing_url, $email);
+    // Trigger PyAirbnb scraping (async)
+    $pyairbnb_result = pyairbnb_trigger_scraping($listing_url, $email);
     
-    if (is_wp_error($brightdata_result)) {
-        wp_send_json_error(array('message' => $brightdata_result->get_error_message()));
+    if (is_wp_error($pyairbnb_result)) {
+        wp_send_json_error(array('message' => $pyairbnb_result->get_error_message()));
     }
     
-    // Check if test mode is enabled
-    $test_mode = get_option('airbnb_analyzer_brightdata_test_mode', false);
-    
-    if ($test_mode) {
-        $message = 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. NOTE: Test mode is enabled, so email notifications are disabled. Please check the admin dashboard for results or disable test mode to receive email alerts.';
-    } else {
-        $message = 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. You will receive the results via email within 1-2 minutes.';
-    }
+    $message = 'Your request has been submitted successfully! We are now analyzing your Airbnb listing. You will receive the results via email within 1-2 minutes.';
     
     // Return success with pending status
     wp_send_json_success(array(
         'status' => 'pending',
         'message' => $message,
-        'snapshot_id' => $brightdata_result['snapshot_id'],
-        'test_mode' => $test_mode
+        'snapshot_id' => $pyairbnb_result['request_id']
     ));
 }
 

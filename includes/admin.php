@@ -724,8 +724,8 @@ function airbnb_analyzer_process_pending_requests() {
                 continue;
             }
             
-            // Convert Brightdata data to analyzer format
-            $listing_data = brightdata_format_for_analyzer($brightdata_response);
+            // Convert PyAirbnb data to analyzer format
+            $listing_data = pyairbnb_format_for_analyzer($brightdata_response);
             
             if (empty($listing_data)) {
                 $error_count++;
