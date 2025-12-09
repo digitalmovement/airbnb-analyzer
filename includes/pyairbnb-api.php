@@ -221,27 +221,96 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         return array();
     }
     
-    // Extract basic listing information
-    $listing = $pyairbnb_data;
+    // Handle wrapped response (data key) or direct response
+    $listing = isset($pyairbnb_data['data']) ? $pyairbnb_data['data'] : $pyairbnb_data;
     
-    // Parse bedrooms, bathrooms, beds
-    $bedrooms = isset($listing['bedrooms']) ? intval($listing['bedrooms']) : 0;
-    $bathrooms = isset($listing['bathrooms']) ? floatval($listing['bathrooms']) : 0;
-    $beds = isset($listing['beds']) ? intval($listing['beds']) : 0;
-    $max_guests = isset($listing['max_guests']) ? intval($listing['max_guests']) : 
-                  (isset($listing['accommodates']) ? intval($listing['accommodates']) : 0);
+    // Parse bedrooms, bathrooms, beds, max_guests from sub_description.items
+    $bedrooms = 0;
+    $bathrooms = 0;
+    $beds = 0;
+    $max_guests = isset($listing['person_capacity']) ? intval($listing['person_capacity']) : 0;
     
-    // Extract amenities - preserve structure if available
-    $amenities = array();
-    if (isset($listing['amenities']) && is_array($listing['amenities'])) {
-        $amenities = $listing['amenities'];
+    if (isset($listing['sub_description']['items']) && is_array($listing['sub_description']['items'])) {
+        foreach ($listing['sub_description']['items'] as $item) {
+            if (is_string($item)) {
+                // Parse strings like "1 bedroom", "2 beds", "1.5 baths", "4 guests"
+                if (preg_match('/(\d+(?:\.\d+)?)\s*bedroom/i', $item, $matches)) {
+                    $bedrooms = intval($matches[1]);
+                }
+                if (preg_match('/(\d+(?:\.\d+)?)\s*bed(?!room)/i', $item, $matches)) {
+                    $beds = intval($matches[1]);
+                }
+                if (preg_match('/(\d+(?:\.\d+)?)\s*bath/i', $item, $matches)) {
+                    $bathrooms = floatval($matches[1]);
+                }
+                if (preg_match('/(\d+)\s*guest/i', $item, $matches)) {
+                    $max_guests = intval($matches[1]);
+                }
+            }
+        }
     }
     
-    // Extract host info
-    $host_name = isset($listing['host_name']) ? $listing['host_name'] : '';
+    // Fallback to direct fields if available
+    if ($bedrooms == 0 && isset($listing['bedrooms'])) {
+        $bedrooms = intval($listing['bedrooms']);
+    }
+    if ($bathrooms == 0 && isset($listing['bathrooms'])) {
+        $bathrooms = floatval($listing['bathrooms']);
+    }
+    if ($beds == 0 && isset($listing['beds'])) {
+        $beds = intval($listing['beds']);
+    }
+    if ($max_guests == 0 && isset($listing['max_guests'])) {
+        $max_guests = intval($listing['max_guests']);
+    }
+    
+    // Convert amenities from new format {title, values[{available, icon, subtitle, title}]}
+    // to analyzer format {group_name, items[{name, value}]}
+    $amenities = array();
+    if (isset($listing['amenities']) && is_array($listing['amenities'])) {
+        foreach ($listing['amenities'] as $amenity_group) {
+            if (is_array($amenity_group) && isset($amenity_group['title']) && isset($amenity_group['values'])) {
+                $group_items = array();
+                foreach ($amenity_group['values'] as $amenity_item) {
+                    if (is_array($amenity_item) && isset($amenity_item['title'])) {
+                        // Only include available amenities
+                        $is_available = isset($amenity_item['available']) ? $amenity_item['available'] : true;
+                        if ($is_available) {
+                            $group_items[] = array(
+                                'name' => $amenity_item['title'],
+                                'value' => isset($amenity_item['icon']) ? $amenity_item['icon'] : '',
+                                'subtitle' => isset($amenity_item['subtitle']) ? $amenity_item['subtitle'] : ''
+                            );
+                        }
+                    }
+                }
+                if (!empty($group_items)) {
+                    $amenities[] = array(
+                        'group_name' => $amenity_group['title'],
+                        'items' => $group_items
+                    );
+                }
+            }
+        }
+    }
+    
+    // Extract host info from host object and host_details
+    $host_name = '';
+    if (isset($listing['host']['name'])) {
+        $host_name = $listing['host']['name'];
+        // Remove "Hosted by " prefix if present
+        $host_name = preg_replace('/^Hosted by\s+/i', '', $host_name);
+    } elseif (isset($listing['host_name'])) {
+        $host_name = $listing['host_name'];
+    }
+    
     $host_since = isset($listing['host_since']) ? $listing['host_since'] : '';
-    $host_is_superhost = isset($listing['is_superhost']) ? (bool)$listing['is_superhost'] : 
-                         (isset($listing['is_supperhost']) ? (bool)$listing['is_supperhost'] : false);
+    
+    // is_super_host in new API format (note the underscore)
+    $host_is_superhost = isset($listing['is_super_host']) ? (bool)$listing['is_super_host'] : 
+                         (isset($listing['is_superhost']) ? (bool)$listing['is_superhost'] : 
+                         (isset($listing['is_supperhost']) ? (bool)$listing['is_supperhost'] : false));
+    
     $host_response_rate = isset($listing['host_response_rate']) ? intval($listing['host_response_rate']) : 0;
     $host_rating = isset($listing['host_rating']) ? floatval($listing['host_rating']) : 0;
     $host_review_count = isset($listing['host_review_count']) ? intval($listing['host_review_count']) : 0;
@@ -260,27 +329,98 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         }
     }
     
-    // Extract property rating details
+    // Extract rating - new API uses rating object with individual category values
+    $overall_rating = 0;
+    $review_count = 0;
     $property_rating_details = array();
-    if (isset($listing['property_rating_details']) && is_array($listing['property_rating_details'])) {
-        $property_rating_details = $listing['property_rating_details'];
-    } elseif (isset($listing['rating_details']) && is_array($listing['rating_details'])) {
-        foreach ($listing['rating_details'] as $key => $value) {
-            if (is_numeric($value)) {
+    
+    if (isset($listing['rating']) && is_array($listing['rating'])) {
+        // New API format: rating object with accuracy, checking, cleanliness, etc.
+        $rating_obj = $listing['rating'];
+        
+        // Use guest_satisfaction as the main rating, or calculate average
+        if (isset($rating_obj['guest_satisfaction'])) {
+            $overall_rating = floatval($rating_obj['guest_satisfaction']);
+        } else {
+            // Calculate average from available ratings
+            $rating_sum = 0;
+            $rating_count = 0;
+            foreach (['accuracy', 'cleanliness', 'communication', 'location', 'value', 'checking'] as $key) {
+                if (isset($rating_obj[$key]) && is_numeric($rating_obj[$key])) {
+                    $rating_sum += floatval($rating_obj[$key]);
+                    $rating_count++;
+                }
+            }
+            if ($rating_count > 0) {
+                $overall_rating = $rating_sum / $rating_count;
+            }
+        }
+        
+        // Extract review count from rating object
+        if (isset($rating_obj['review_count'])) {
+            $review_count = intval($rating_obj['review_count']);
+        }
+        
+        // Convert to property_rating_details format
+        $rating_category_map = array(
+            'accuracy' => 'Accuracy',
+            'checking' => 'Check-in',
+            'cleanliness' => 'Cleanliness',
+            'communication' => 'Communication',
+            'location' => 'Location',
+            'value' => 'Value'
+        );
+        
+        foreach ($rating_category_map as $key => $name) {
+            if (isset($rating_obj[$key]) && is_numeric($rating_obj[$key])) {
                 $property_rating_details[] = array(
-                    'name' => ucfirst(str_replace('_', ' ', $key)),
-                    'value' => floatval($value)
+                    'name' => $name,
+                    'value' => floatval($rating_obj[$key])
                 );
             }
         }
+    } elseif (isset($listing['rating']) && is_numeric($listing['rating'])) {
+        // Old format: rating is a simple number
+        $overall_rating = floatval($listing['rating']);
+    } elseif (isset($listing['ratings']) && is_numeric($listing['ratings'])) {
+        $overall_rating = floatval($listing['ratings']);
+    }
+    
+    // Fallback review count
+    if ($review_count == 0 && isset($listing['review_count'])) {
+        $review_count = intval($listing['review_count']);
+    }
+    
+    // Extract photos from images array (new API uses 'images' with title/url)
+    $photos = array();
+    if (isset($listing['images']) && is_array($listing['images'])) {
+        foreach ($listing['images'] as $image) {
+            if (is_array($image) && isset($image['url'])) {
+                $photos[] = $image['url'];
+            } elseif (is_string($image)) {
+                $photos[] = $image;
+            }
+        }
+    } elseif (isset($listing['photos']) && is_array($listing['photos'])) {
+        $photos = $listing['photos'];
     }
     
     // Extract house rules
     $house_rules = '';
-    if (isset($listing['house_rules']) && is_array($listing['house_rules'])) {
-        $house_rules = implode("\n", $listing['house_rules']);
-    } elseif (isset($listing['house_rules']) && is_string($listing['house_rules'])) {
-        $house_rules = $listing['house_rules'];
+    if (isset($listing['house_rules'])) {
+        if (is_array($listing['house_rules'])) {
+            // New format: {general, aditional}
+            $rules_parts = array();
+            if (!empty($listing['house_rules']['general'])) {
+                $rules_parts[] = trim($listing['house_rules']['general']);
+            }
+            if (!empty($listing['house_rules']['aditional'])) {
+                $rules_parts[] = trim($listing['house_rules']['aditional']);
+            }
+            $house_rules = implode("\n", array_filter($rules_parts));
+        } elseif (is_string($listing['house_rules'])) {
+            $house_rules = $listing['house_rules'];
+        }
     }
     
     // Extract cancellation policy
@@ -304,23 +444,66 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         }
     }
     
-    // Extract description by sections if available
-    $description_by_sections = null;
-    if (isset($listing['description_by_sections']) && is_array($listing['description_by_sections'])) {
-        $description_by_sections = $listing['description_by_sections'];
+    // Parse description - new API includes HTML-formatted sections
+    $description = isset($listing['description']) ? $listing['description'] : '';
+    $description_by_sections = pyairbnb_parse_description_sections($description);
+    
+    // Extract location from location_descriptions or sub_description.title
+    $location = '';
+    if (isset($listing['location_descriptions']) && is_array($listing['location_descriptions']) && !empty($listing['location_descriptions'])) {
+        // First location_descriptions item usually has the location
+        $first_location = $listing['location_descriptions'][0];
+        if (isset($first_location['title'])) {
+            $location = $first_location['title'];
+        }
+    } elseif (isset($listing['sub_description']['title'])) {
+        // Extract location from title like "Entire rental unit in Dubai, United Arab Emirates"
+        if (preg_match('/in\s+(.+)$/i', $listing['sub_description']['title'], $matches)) {
+            $location = trim($matches[1]);
+        }
+    } elseif (isset($listing['location'])) {
+        $location = $listing['location'];
+    }
+    
+    // Extract property type
+    $property_type = '';
+    if (isset($listing['room_type'])) {
+        $property_type = $listing['room_type'];
+    } elseif (isset($listing['sub_description']['title'])) {
+        // Extract property type from title like "Entire rental unit in..."
+        if (preg_match('/^(Entire\s+\w+(?:\s+\w+)?)/i', $listing['sub_description']['title'], $matches)) {
+            $property_type = trim($matches[1]);
+        }
+    } elseif (isset($listing['property_type'])) {
+        $property_type = $listing['property_type'];
+    }
+    
+    // Extract neighborhood details from location_descriptions
+    $neighborhood_details = '';
+    if (isset($listing['location_descriptions']) && is_array($listing['location_descriptions'])) {
+        $neighborhood_parts = array();
+        foreach ($listing['location_descriptions'] as $loc_desc) {
+            if (isset($loc_desc['content'])) {
+                $neighborhood_parts[] = $loc_desc['content'];
+            }
+        }
+        $neighborhood_details = implode("\n\n", $neighborhood_parts);
+    } elseif (isset($listing['neighborhood_details'])) {
+        $neighborhood_details = $listing['neighborhood_details'];
     }
     
     // Format data for analyzer
     $listing_data = array(
         'id' => isset($listing['id']) ? $listing['id'] : '',
         'title' => isset($listing['title']) ? $listing['title'] : '',
-        'description' => isset($listing['description']) ? $listing['description'] : '',
+        'listing_title' => isset($listing['title']) ? $listing['title'] : '', // Alias for analyzer
+        'description' => $description,
         'description_by_sections' => $description_by_sections,
-        'photos' => isset($listing['photos']) && is_array($listing['photos']) ? $listing['photos'] : array(),
+        'photos' => $photos,
         'price' => isset($listing['price']) ? floatval($listing['price']) : 0,
         'price_currency' => isset($listing['price_currency']) ? $listing['price_currency'] : 
                            (isset($listing['currency']) ? $listing['currency'] : 'USD'),
-        'location' => isset($listing['location']) ? $listing['location'] : '',
+        'location' => $location,
         'bedrooms' => $bedrooms,
         'bathrooms' => $bathrooms,
         'beds' => $beds,
@@ -329,6 +512,7 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         'host_name' => $host_name,
         'host_since' => $host_since,
         'is_superhost' => $host_is_superhost,
+        'is_supperhost' => $host_is_superhost, // Keep for backwards compatibility with analyzer
         'host_about' => $host_about,
         'host_response_rate' => $host_response_rate,
         'host_response_time' => $host_response_time,
@@ -336,22 +520,119 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         'host_rating' => $host_rating,
         'host_review_count' => $host_review_count,
         'hosts_year' => $hosts_year,
-        'neighborhood_details' => isset($listing['neighborhood_details']) ? $listing['neighborhood_details'] : '',
-        'rating' => isset($listing['rating']) ? floatval($listing['rating']) : 
-                   (isset($listing['ratings']) ? floatval($listing['ratings']) : 0),
-        'ratings' => isset($listing['rating']) ? floatval($listing['rating']) : 
-                    (isset($listing['ratings']) ? floatval($listing['ratings']) : 0),
-        'review_count' => isset($listing['review_count']) ? intval($listing['review_count']) : 0,
+        'neighborhood_details' => $neighborhood_details,
+        'rating' => $overall_rating,
+        'ratings' => $overall_rating,
+        'review_count' => $review_count,
+        'property_number_of_reviews' => $review_count, // Alias for analyzer
         'property_rating_details' => $property_rating_details,
         'is_new_listing' => isset($listing['is_new_listing']) ? (bool)$listing['is_new_listing'] : false,
         'is_guest_favorite' => isset($listing['is_guest_favorite']) ? (bool)$listing['is_guest_favorite'] : false,
-        'property_type' => isset($listing['property_type']) ? $listing['property_type'] : '',
+        'property_type' => $property_type,
         'house_rules' => $house_rules,
         'cancellation_policy' => $cancellation_policy,
-        'cancellation_policy_details' => $cancellation_policy_details
+        'cancellation_policy_details' => $cancellation_policy_details,
+        // Additional data for display
+        'highlights' => isset($listing['highlights']) ? $listing['highlights'] : array(),
+        'reviews' => isset($listing['reviews']) ? $listing['reviews'] : array(),
+        'coordinates' => isset($listing['coordinates']) ? $listing['coordinates'] : null
     );
     
     return $listing_data;
+}
+
+/**
+ * Parse HTML description into sections
+ * New API format includes HTML with <b>The space</b>, <b>Guest access</b>, <b>Other things to note</b>
+ * 
+ * @param string $description HTML description
+ * @return array Array of sections with title and value
+ */
+function pyairbnb_parse_description_sections($description) {
+    if (empty($description)) {
+        return array();
+    }
+    
+    $sections = array();
+    
+    // Split by bold section headers like <b>The space</b>, <b>Guest access</b>, etc.
+    $pattern = '/<b>([^<]+)<\/b>/i';
+    
+    // Find all section headers
+    preg_match_all($pattern, $description, $matches, PREG_OFFSET_CAPTURE);
+    
+    if (!empty($matches[0])) {
+        // Extract text before first section header as main description
+        $first_header_pos = $matches[0][0][1];
+        if ($first_header_pos > 0) {
+            $main_text = substr($description, 0, $first_header_pos);
+            $main_text = pyairbnb_clean_description_text($main_text);
+            if (!empty($main_text)) {
+                $sections[] = array(
+                    'title' => null,
+                    'value' => $main_text
+                );
+            }
+        }
+        
+        // Extract each section
+        for ($i = 0; $i < count($matches[0]); $i++) {
+            $section_title = $matches[1][$i][0];
+            $section_start = $matches[0][$i][1] + strlen($matches[0][$i][0]);
+            
+            // Find end of section (next header or end of string)
+            if ($i < count($matches[0]) - 1) {
+                $section_end = $matches[0][$i + 1][1];
+            } else {
+                $section_end = strlen($description);
+            }
+            
+            $section_text = substr($description, $section_start, $section_end - $section_start);
+            $section_text = pyairbnb_clean_description_text($section_text);
+            
+            if (!empty($section_text)) {
+                $sections[] = array(
+                    'title' => $section_title,
+                    'value' => $section_text
+                );
+            }
+        }
+    } else {
+        // No section headers found, use entire description as main section
+        $clean_text = pyairbnb_clean_description_text($description);
+        if (!empty($clean_text)) {
+            $sections[] = array(
+                'title' => null,
+                'value' => $clean_text
+            );
+        }
+    }
+    
+    return $sections;
+}
+
+/**
+ * Clean description text by removing HTML tags and normalizing whitespace
+ * 
+ * @param string $text HTML text
+ * @return string Clean text
+ */
+function pyairbnb_clean_description_text($text) {
+    // Replace <br> and <br/> with newlines
+    $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
+    
+    // Remove remaining HTML tags
+    $text = strip_tags($text);
+    
+    // Decode HTML entities
+    $text = html_entity_decode($text, ENT_QUOTES, 'UTF-8');
+    
+    // Normalize whitespace
+    $text = preg_replace('/[ \t]+/', ' ', $text);
+    $text = preg_replace('/\n\s+/', "\n", $text);
+    $text = preg_replace('/\n{3,}/', "\n\n", $text);
+    
+    return trim($text);
 }
 
 /**
