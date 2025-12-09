@@ -239,16 +239,49 @@ function pyairbnb_process_request($request_id) {
     }
     
     // Convert pyairbnb data to analyzer format
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("About to call pyairbnb_format_for_analyzer. Raw data type: " . gettype($raw_data) . ", is_array: " . (is_array($raw_data) ? 'YES' : 'NO'), 'Airbnb API');
+    }
+    
     $listing_data = pyairbnb_format_for_analyzer($raw_data);
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Format conversion function returned. Type: " . gettype($listing_data) . ", is_array: " . (is_array($listing_data) ? 'YES' : 'NO') . ", count: " . (is_array($listing_data) ? count($listing_data) : 'N/A'), 'Airbnb API');
+    }
     
     // Check if format conversion returned valid data (not just empty array)
     $has_data = false;
     if (is_array($listing_data) && !empty($listing_data)) {
         // Check if at least one field has a non-empty value
+        // Also check nested arrays and objects
         foreach ($listing_data as $key => $value) {
             if (!empty($value) || (is_numeric($value) && $value == 0)) {
                 $has_data = true;
                 break;
+            }
+            // Check if it's a non-empty array (even if empty() returns true for arrays with empty strings)
+            if (is_array($value) && count($value) > 0) {
+                $has_data = true;
+                break;
+            }
+        }
+        
+        // Also check if we have at least title or id (critical fields)
+        if (!$has_data && (isset($listing_data['title']) || isset($listing_data['id']) || isset($listing_data['listing_title']))) {
+            $has_data = true;
+        }
+    }
+    
+    if (function_exists('airbnb_analyzer_debug_log')) {
+        airbnb_analyzer_debug_log("Data validation check. has_data: " . ($has_data ? 'YES' : 'NO') . ", listing_data count: " . (is_array($listing_data) ? count($listing_data) : 'N/A'), 'Airbnb API');
+        if (is_array($listing_data)) {
+            $sample_keys = array_slice(array_keys($listing_data), 0, 5);
+            airbnb_analyzer_debug_log("Sample keys in listing_data: " . implode(', ', $sample_keys), 'Airbnb API');
+            foreach ($sample_keys as $key) {
+                $val = $listing_data[$key];
+                $val_type = gettype($val);
+                $val_preview = is_string($val) ? substr($val, 0, 50) : (is_array($val) ? 'array(' . count($val) . ')' : (string)$val);
+                airbnb_analyzer_debug_log("  - $key: type=$val_type, preview=" . substr($val_preview, 0, 50), 'Airbnb API');
             }
         }
     }
@@ -344,11 +377,12 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
         
         if (function_exists('airbnb_analyzer_debug_log')) {
             airbnb_analyzer_debug_log("Listing data extracted. Listing keys: " . (is_array($listing) ? implode(', ', array_keys($listing)) : 'not an array'), 'Airbnb API Format');
+            airbnb_analyzer_debug_log("Listing data type check - is_array: " . (is_array($listing) ? 'YES' : 'NO') . ", empty: " . (empty($listing) ? 'YES' : 'NO') . ", count: " . (is_array($listing) ? count($listing) : 'N/A'), 'Airbnb API Format');
         }
         
         if (empty($listing) || !is_array($listing)) {
             if (function_exists('airbnb_analyzer_debug_log')) {
-                airbnb_analyzer_debug_log("Format conversion failed: Listing data is empty or not an array", 'Airbnb API Format Error');
+                airbnb_analyzer_debug_log("Format conversion failed: Listing data is empty or not an array. Type: " . gettype($listing) . ", Empty: " . (empty($listing) ? 'YES' : 'NO') . ", Is Array: " . (is_array($listing) ? 'YES' : 'NO'), 'Airbnb API Format Error');
             }
             return array();
         }
@@ -700,6 +734,7 @@ function pyairbnb_format_for_analyzer($pyairbnb_data) {
             }
             airbnb_analyzer_debug_log("Format conversion completed. Output keys: " . implode(', ', $data_keys), 'Airbnb API Format');
             airbnb_analyzer_debug_log("Format conversion: $non_empty_count non-empty fields out of " . count($listing_data), 'Airbnb API Format');
+            airbnb_analyzer_debug_log("About to return listing_data from format function. Type: " . gettype($listing_data) . ", Count: " . count($listing_data), 'Airbnb API Format');
         }
         
         return $listing_data;
